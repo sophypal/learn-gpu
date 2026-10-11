@@ -1,0 +1,3 @@
+edition = "2026_pre"
+root = "src/shaders"
+include = ["src/shaders/**/*.w[eg]sl"]

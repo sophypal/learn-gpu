@@ -1,35 +1,6 @@
 import './style.css';
-
-const sharedStructs = /* wgsl */`
-struct VertexOutput {
-  @builtin(position) position: vec4<f32>
-}
-`;
-
-const vertexShader = /* wgsl */`
-struct VertexInput {
-  @location(0) position: vec2<f32>
-};
-
-${sharedStructs}
-
-@vertex
-fn vsMain (vertex: VertexInput) -> VertexOutput {
-  var out: VertexOutput;
-  out.position = vec4<f32>(vertex.position, 0.0, 1.0);
-
-  return out;
-}
-`;
-
-const fragShader = /* wgsl */`
-${sharedStructs}
-
-@fragment
-fn fsMain (vertexOutput: VertexOutput) -> @location(0) vec4<f32> {
-  return vertexOutput.position;
-}
-`;
+import vertexShader from './shaders/vert.wesl?static';
+import fragmentShader from './shaders/frag.wesl?static';
 
 async function init() {
   const canvas = document.querySelector('canvas');
@@ -65,7 +36,7 @@ async function init() {
   });
 
   const fragmentShaderModule = device.createShaderModule({
-    code: fragShader
+    code: fragmentShader
   });
 
   const renderPipeline = device.createRenderPipeline({
