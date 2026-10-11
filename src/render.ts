@@ -1,3 +1,4 @@
+import type { DrawPacket } from './draw-packet';
 import { DEPTH_FORMAT } from './pipeline';
 
 export function createDepthTexture(device: GPUDevice) {
@@ -11,14 +12,11 @@ export function createDepthTexture(device: GPUDevice) {
 interface FrameResources {
   device: GPUDevice;
   context: GPUCanvasContext;
-  pipeline: GPURenderPipeline;
-  bindGroup: GPUBindGroup;
-  vertexBuffer: GPUBuffer;
-  indexBuffer: GPUBuffer;
   depthTexture: GPUTexture;
+  drawPacket: DrawPacket;
 }
 
-export function drawFrame({ device, context, pipeline, bindGroup, vertexBuffer, indexBuffer, depthTexture }: FrameResources) {
+export function drawFrame({ device, context, depthTexture, drawPacket }: FrameResources) {
   const commandEncoder = device.createCommandEncoder();
 
   const pass = commandEncoder.beginRenderPass({
@@ -36,12 +34,18 @@ export function drawFrame({ device, context, pipeline, bindGroup, vertexBuffer, 
     }
   });
 
+  const {pipeline, vertexBuffers, indexBuffer, bindGroups} = drawPacket;
+
   pass.setPipeline(pipeline);
-  pass.setBindGroup(0, bindGroup);
-  pass.setVertexBuffer(0, vertexBuffer);
+  pass.setBindGroup(0, bindGroups[0]);
+
+  for (let i = 0; i < vertexBuffers.length; i++) {
+    pass.setVertexBuffer(i, vertexBuffers[i]);
+  }
+
   pass.setIndexBuffer(indexBuffer, 'uint16');
-  pass.drawIndexed(6, 1, 0);
-  pass.drawIndexed(6, 1, 0, 4);
+  pass.drawIndexed(6, 2, 0);
+
   pass.end();
 
   const commands = commandEncoder.finish();

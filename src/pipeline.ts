@@ -1,6 +1,6 @@
 import vertexShader from './shaders/vert.wesl?static';
 import fragmentShader from './shaders/frag.wesl?static';
-import { vertexBufferLayout } from './vertexLayout';
+import { meshLayout, modelLayout } from './vertexLayout';
 
 export const DEPTH_FORMAT: GPUTextureFormat = 'depth24plus';
 
@@ -18,7 +18,7 @@ export function createRenderPipeline(device: GPUDevice, format: GPUTextureFormat
     vertex: {
       module: vertexShaderModule,
       entryPoint: 'vsMain',
-      buffers: [vertexBufferLayout]
+      buffers: [meshLayout, modelLayout]
     },
     fragment: {
       module: fragmentShaderModule,

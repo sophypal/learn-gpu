@@ -3,7 +3,7 @@ import { COLOR_OFFSET, FLOAT_STRIDE, VERTEX_STRIDE } from './vertexLayout';
 const VERTEX_COUNT = 8;
 
 export function createQuads(device: GPUDevice) {
-  const vertexBuffer = device.createBuffer({
+  const geometryBuffer = device.createBuffer({
     size: VERTEX_STRIDE * VERTEX_COUNT,
     usage: GPUBufferUsage.VERTEX | GPUBufferUsage.COPY_DST,
     mappedAtCreation: true
@@ -15,7 +15,7 @@ export function createQuads(device: GPUDevice) {
     mappedAtCreation: true
   });
 
-  const vertices = vertexBuffer.getMappedRange();
+  const vertices = geometryBuffer.getMappedRange();
   const f32 = new Float32Array(vertices);
   const u8 = new Uint8Array(vertices);
 
@@ -24,21 +24,16 @@ export function createQuads(device: GPUDevice) {
     u8.set([r, g, b, a], index * VERTEX_STRIDE + COLOR_OFFSET);
   }
 
-  setVertex(0, -0.75, -0.5, -1.0, 255, 0, 0, 255);
-  setVertex(1, 0.25, -0.5, -1.0, 0, 255, 0, 255);
-  setVertex(2, 0.25, 0.5, -1.0, 0, 0, 255, 255);
-  setVertex(3, -0.75, 0.5, -1.0, 0, 255, 0, 255);
+  setVertex(0, -0.5, -0.5, 0.0, 255, 0, 0, 255);
+  setVertex(1, 0.5, -0.5, 0.0, 0, 255, 0, 255);
+  setVertex(2, 0.5, 0.5, 0.0, 0, 0, 255, 255);
+  setVertex(3, -0.5, 0.5, 0.0, 0, 255, 0, 255);
 
-  setVertex(4, -0.25, -0.5, -2.0, 255, 0, 0, 255);
-  setVertex(5, 0.75, -0.5, -2.0, 0, 255, 0, 255);
-  setVertex(6, 0.75, 0.5, -2.0, 0, 0, 255, 255);
-  setVertex(7, -0.25, 0.5, -2.0, 0, 255, 0, 255);
-
-  vertexBuffer.unmap();
+  geometryBuffer.unmap();
 
   new Uint16Array(indexBuffer.getMappedRange()).set([0, 1, 2, 0, 2, 3]);
 
   indexBuffer.unmap();
 
-  return { vertexBuffer, indexBuffer };
+  return { geometryBuffer, indexBuffer };
 }
