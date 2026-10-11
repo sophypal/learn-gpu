@@ -3,7 +3,7 @@ import { mat4 } from 'wgpu-matrix';
 function createViewProjection(aspect: number) {
   const fov = 60 * Math.PI/180;
   const near = 1;
-  const far = 100;
+  const far = 1000;
 
   const perspective = mat4.perspective(
     fov,
@@ -12,7 +12,7 @@ function createViewProjection(aspect: number) {
     far
   );
 
-  const eye = [0.0, 0.0, 1.0];
+  const eye = [0.0, 0.0, 10.0];
   const target = [0.0, 0.0, -1.0];
   const up = [0.0, 1.0, 0.0];
 

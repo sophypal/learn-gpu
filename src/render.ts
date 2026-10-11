@@ -34,17 +34,9 @@ export function drawFrame({ device, context, depthTexture, drawPacket }: FrameRe
     }
   });
 
-  const {pipeline, vertexBuffers, indexBuffer, bindGroups} = drawPacket;
+  const {execute} = drawPacket;
 
-  pass.setPipeline(pipeline);
-  pass.setBindGroup(0, bindGroups[0]);
-
-  for (let i = 0; i < vertexBuffers.length; i++) {
-    pass.setVertexBuffer(i, vertexBuffers[i]);
-  }
-
-  pass.setIndexBuffer(indexBuffer, 'uint16');
-  pass.drawIndexed(6, 2, 0);
+  execute(pass);
 
   pass.end();
 

@@ -10,10 +10,16 @@ async function init() {
 
   const { device, context, format } = await initGPU(canvas);
 
-  const drawPacket = createDrawPacket(device, format);
+  const drawPacket = createDrawPacket(device, format, 10000);
   const depthTexture = createDepthTexture(device);
 
-  drawFrame({ device, context, depthTexture, drawPacket });
+  const execute = () => {
+    drawFrame({ device, context, depthTexture, drawPacket });
+
+    requestAnimationFrame(execute)
+  };
+
+  execute();
 }
 
 init();

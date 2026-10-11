@@ -19,15 +19,19 @@ export function createQuads(device: GPUDevice) {
   const f32 = new Float32Array(vertices);
   const u8 = new Uint8Array(vertices);
 
-  function setVertex (index: number, x: number, y: number, z: number, r: number, g: number, b: number, a: number) {
-    f32.set([x, y, z], index * FLOAT_STRIDE);
-    u8.set([r, g, b, a], index * VERTEX_STRIDE + COLOR_OFFSET);
+  function randomColor () {
+    return Math.floor(Math.random() * 255);
   }
 
-  setVertex(0, -0.5, -0.5, 0.0, 255, 0, 0, 255);
-  setVertex(1, 0.5, -0.5, 0.0, 0, 255, 0, 255);
-  setVertex(2, 0.5, 0.5, 0.0, 0, 0, 255, 255);
-  setVertex(3, -0.5, 0.5, 0.0, 0, 255, 0, 255);
+  function setVertex (index: number, x: number, y: number, z: number) {
+    f32.set([x, y, z], index * FLOAT_STRIDE);
+    u8.set([randomColor(), randomColor(), randomColor(), randomColor()], index * VERTEX_STRIDE + COLOR_OFFSET);
+  }
+
+  setVertex(0, -0.5, -0.5, 0.0);
+  setVertex(1, 0.5, -0.5, 0.0);
+  setVertex(2, 0.5, 0.5, 0.0);
+  setVertex(3, -0.5, 0.5, 0.0);
 
   geometryBuffer.unmap();
 
