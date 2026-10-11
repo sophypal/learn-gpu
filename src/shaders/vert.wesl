@@ -1,13 +1,15 @@
 import package::types::VertexOutput;
 
 struct VertexInput {
-    @location(0) position: vec2<f32>
+    @location(0) position: vec3f,
+    @location(1) color: vec4f
 };
 
 @vertex
 fn vsMain (vertex: VertexInput) -> VertexOutput {
     var out: VertexOutput;
-    out.position = vec4<f32>(vertex.position, 0.0, 1.0);
+    out.position = vec4f(vertex.position, 1.0);
+    out.color = vertex.color;
 
     return out;
 }

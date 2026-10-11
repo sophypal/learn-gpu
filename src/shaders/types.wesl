@@ -1,3 +1,4 @@
 struct VertexOutput {
-    @builtin(position) position: vec4<f32>
+    @builtin(position) position: vec4f,
+    @location(0) color: vec4f
 };
