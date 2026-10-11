@@ -1,6 +1,7 @@
 import './style.css';
-import vertexShader from './shaders/vert.wesl?static';
-import fragmentShader from './shaders/frag.wesl?static';
+import vertexShader from './shaders/vert.wesl?static'
+import fragmentShader from './shaders/frag.wesl?static'
+import {mat4} from 'wgpu-matrix'
 
 async function init() {
   const canvas = document.querySelector('canvas');
@@ -29,6 +30,37 @@ async function init() {
     mappedAtCreation: true
   });
 
+  const uniformBuffer = device.createBuffer({
+    size: 16 * Float32Array.BYTES_PER_ELEMENT,
+    usage: GPUBufferUsage.UNIFORM | GPUBufferUsage.COPY_DST
+  })
+
+  const fov = 60 * Math.PI/180;
+  const aspect = window.innerWidth / window.innerHeight;
+  const near = 1;
+  const far = 100;
+
+  const perspective = mat4.perspective(
+    fov,
+    aspect,
+    near,
+    far
+  );
+
+  const eye = [0.0, 0.0, 1.0];
+  const target = [0.0, 0.0, -1.0];
+  const up = [0.0, 1.0, 0.0];
+
+  const camera = mat4.lookAt(
+    eye,
+    target,
+    up
+  );
+
+
+  const viewProjection = mat4.mul(perspective, camera);
+  device.queue.writeBuffer(uniformBuffer, 0, viewProjection);
+
   const vertices = vertexBuffer.getMappedRange();
   const f32 = new Float32Array(vertices);
   const u8 = new Uint8Array(vertices);
@@ -42,10 +74,10 @@ async function init() {
     u8.set([r, g, b, a], index * byteStride + colorOffset);
   }
 
-  setVertex(0, -0.5, -0.5, 0.0, 255, 0, 0, 255);
-  setVertex(1, 0.5, -0.5, 0.0, 0, 255, 0, 255);
-  setVertex(2, 0.5, 0.5, 0.0, 0, 0, 255, 255);
-  setVertex(3, -0.5, 0.5, 0.0, 0, 255, 0, 255);
+  setVertex(0, -1.0, -1.0, -1.0, 255, 0, 0, 255);
+  setVertex(1, 1.0, -1.0, -1.0, 0, 255, 0, 255);
+  setVertex(2, 1.0, 1.0, -1.0, 0, 0, 255, 255);
+  setVertex(3, -1.0, 1.0, -1.0, 0, 255, 0, 255);
 
   vertexBuffer.unmap();
 
@@ -92,6 +124,14 @@ async function init() {
     }
   });
 
+  const bindGroup = device.createBindGroup({
+    layout: renderPipeline.getBindGroupLayout(0),
+    entries: [{
+      binding: 0,
+      resource: uniformBuffer
+    }]
+  })
+
   const commandEncoder = device.createCommandEncoder();
 
   const pass = commandEncoder.beginRenderPass({
@@ -103,7 +143,9 @@ async function init() {
     }]
   });
 
+
   pass.setPipeline(renderPipeline);
+  pass.setBindGroup(0, bindGroup);
   pass.setVertexBuffer(0, vertexBuffer);
   pass.setIndexBuffer(indexBuffer, 'uint16');
   pass.drawIndexed(6);
