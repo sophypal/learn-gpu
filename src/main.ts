@@ -19,7 +19,7 @@ async function init() {
   });
 
   const vertexBuffer = device.createBuffer({
-    size: (3 * Float32Array.BYTES_PER_ELEMENT + 4 * Uint8Array.BYTES_PER_ELEMENT) * 4,
+    size: (3 * Float32Array.BYTES_PER_ELEMENT + 4 * Uint8Array.BYTES_PER_ELEMENT) * 8,
     usage: GPUBufferUsage.VERTEX | GPUBufferUsage.COPY_DST,
     mappedAtCreation: true
   });
@@ -74,10 +74,15 @@ async function init() {
     u8.set([r, g, b, a], index * byteStride + colorOffset);
   }
 
-  setVertex(0, -1.0, -1.0, -1.0, 255, 0, 0, 255);
-  setVertex(1, 1.0, -1.0, -1.0, 0, 255, 0, 255);
-  setVertex(2, 1.0, 1.0, -1.0, 0, 0, 255, 255);
-  setVertex(3, -1.0, 1.0, -1.0, 0, 255, 0, 255);
+  setVertex(0, -0.75, -0.5, -1.0, 255, 0, 0, 255);
+  setVertex(1, 0.25, -0.5, -1.0, 0, 255, 0, 255);
+  setVertex(2, 0.25, 0.5, -1.0, 0, 0, 255, 255);
+  setVertex(3, -0.75, 0.5, -1.0, 0, 255, 0, 255);
+
+  setVertex(4, -0.25, -0.5, -2.0, 255, 0, 0, 255);
+  setVertex(5, 0.75, -0.5, -2.0, 0, 255, 0, 255);
+  setVertex(6, 0.75, 0.5, -2.0, 0, 0, 255, 255);
+  setVertex(7, -0.25, 0.5, -2.0, 0, 255, 0, 255);
 
   vertexBuffer.unmap();
 
@@ -121,8 +126,19 @@ async function init() {
     primitive: {
       topology: 'triangle-list',
       cullMode: 'back',
+    },
+    depthStencil: {
+      format: 'depth24plus',
+      depthWriteEnabled: true,
+      depthCompare: 'less'
     }
   });
+
+  const depthTexture = device.createTexture({
+    size: [window.innerWidth, window.innerHeight],
+    format: 'depth24plus',
+    usage: GPUTextureUsage.RENDER_ATTACHMENT,
+  })
 
   const bindGroup = device.createBindGroup({
     layout: renderPipeline.getBindGroupLayout(0),
@@ -140,7 +156,13 @@ async function init() {
       loadOp: 'clear',
       storeOp: 'store',
       clearValue: {r: 0, g: 0, b: 0, a: 0}
-    }]
+    }],
+    depthStencilAttachment: {
+      view: depthTexture,
+      depthClearValue: 1.0,
+      depthLoadOp: 'clear',
+      depthStoreOp: 'store'
+    }
   });
 
 
@@ -148,7 +170,8 @@ async function init() {
   pass.setBindGroup(0, bindGroup);
   pass.setVertexBuffer(0, vertexBuffer);
   pass.setIndexBuffer(indexBuffer, 'uint16');
-  pass.drawIndexed(6);
+  pass.drawIndexed(6, 1, 0);
+  pass.drawIndexed(6, 1, 0, 4);
   pass.end();
 
   const commands = commandEncoder.finish();
