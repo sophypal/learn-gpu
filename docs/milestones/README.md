@@ -11,3 +11,4 @@ One file per git tag. Stages 1–3 were reconstructed on 2026-10-11 and approxim
 | [`stage-4-depth`](stage-4-depth.md) | `baseVertex`, depth buffer | Exact |
 | [`stage-5-refactor`](stage-5-refactor.md) | Modules split by concern | Exact |
 | [`stage-6-instancing`](stage-6-instancing.md) | Draw packets, per-instance attributes | Real |
+| [`stage-7-indirect`](stage-7-indirect.md) | Frame loop, 10k instances, `drawIndexedIndirect` | Real |
