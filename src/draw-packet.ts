@@ -21,6 +21,11 @@ function getRandom (high: number, low: number = 0) {
 }
 
 export function createDrawPacket (device: GPUDevice, format: GPUTextureFormat, instances: number) {
+  const indirectBuffer = device.createBuffer({
+    size: 20,
+    usage: GPUBufferUsage.INDIRECT | GPUBufferUsage.COPY_DST
+  });
+
   const modelBuffer = device.createBuffer({
     size: instances * MAT4_SIZE_IN_BYTES,
     usage: GPUBufferUsage.VERTEX | GPUBufferUsage.COPY_DST,
@@ -30,7 +35,7 @@ export function createDrawPacket (device: GPUDevice, format: GPUTextureFormat, i
   for (let i = 0; i < instances; i++) {
     const x = getRandom(EXTENTS/2, -EXTENTS/2);
     const y = getRandom(EXTENTS/2, -EXTENTS/2);
-    const z = getRandom(-EXTENTS)
+    const z = getRandom(-EXTENTS);
 
     mat4.translation([x, y, z], new Float32Array(modelBuffer.getMappedRange(i*MAT4_SIZE_IN_BYTES, MAT4_SIZE_IN_BYTES)));
   }
@@ -41,6 +46,9 @@ export function createDrawPacket (device: GPUDevice, format: GPUTextureFormat, i
   const pipeline = createRenderPipeline(device, format);
   const uniformBuffer = createCameraBuffer(device, window.innerWidth / window.innerHeight);
   const bindGroup = createCameraBindGroup(device, pipeline, uniformBuffer);
+
+  const drawArgs = new Uint32Array([6, instances, 0, 0, 0]);
+  device.queue.writeBuffer(indirectBuffer, 0, drawArgs);
 
   return {
     instances,
@@ -59,7 +67,7 @@ export function createDrawPacket (device: GPUDevice, format: GPUTextureFormat, i
       pass.setVertexBuffer(1, modelBuffer);
 
       pass.setIndexBuffer(indexBuffer, 'uint16');
-      pass.drawIndexed(6, instances);
+      pass.drawIndexedIndirect(indirectBuffer, 0);
     }
-  }
+  };
 }

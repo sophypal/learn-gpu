@@ -36,4 +36,4 @@ export const modelLayout: GPUVertexBufferLayout = {
       shaderLocation: 5, offset: 48, format: 'float32x4'
     }
   ]
-}
+};

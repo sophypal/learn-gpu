@@ -16,7 +16,7 @@ async function init() {
   const execute = () => {
     drawFrame({ device, context, depthTexture, drawPacket });
 
-    requestAnimationFrame(execute)
+    requestAnimationFrame(execute);
   };
 
   execute();
