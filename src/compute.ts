@@ -40,8 +40,8 @@ export function createComputePacket (device: GPUDevice, renderState: RenderState
   return {
     execute: (pass: GPUComputePassEncoder) => {
       pass.setPipeline(pipeline);
-      pass.setBindGroup(GroupOrder.ComputeVisibility, renderState.bindGroups.bindGroups[Groups.ComputeVisibility]);
-      pass.dispatchWorkgroups(renderState.instances / WORKGROUP_SIZE);
+      pass.setBindGroup(GroupOrder.computeVisibility, renderState.bindGroups.bindGroups[Groups.ComputeVisibility]);
+      pass.dispatchWorkgroups(Math.ceil(renderState.instances / WORKGROUP_SIZE));
     }
   };
 }

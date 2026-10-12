@@ -2,7 +2,7 @@ override WORKGROUP_SIZE: u32 = 64;
 
 struct IndirectDrawArgs {
     indexCount: u32,
-    instanceCount: u32,
+    instanceCount: atomic<u32>,
     firstIndex: u32,
     baseVertex: i32,
     firstInstance: u32
@@ -19,5 +19,10 @@ fn csMain (
     @builtin(global_invocation_id) globalIndex: vec3u,
     @builtin(local_invocation_id) localIndex: vec3u
 ) {
+    if (globalIndex.x >= arrayLength(&entityModel)) {
+        return;
+    }
 
+    let slot = atomicAdd(&indirectDrawArgs.instanceCount, 1u);
+    visibleList[slot] = globalIndex.x;
 }

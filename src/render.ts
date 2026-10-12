@@ -15,6 +15,7 @@ export function drawFrame({ device, context, renderState, drawPacket, computePac
 
 
   if (computePacket) {
+    commandEncoder.clearBuffer(renderState.indirectBuffer, 4, 4);
     const computePass = commandEncoder.beginComputePass({label: 'cull pass'});
 
     renderState.prepareCompute(computePass);

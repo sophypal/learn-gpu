@@ -24,7 +24,7 @@ export function createRenderPipeline(device: GPUDevice, format: GPUTextureFormat
     bindGroupLayouts: [
       renderState.sharedBindGroups.layouts.frame,
       renderState.sharedBindGroups.layouts.entity,
-      //renderState.bindGroups.layouts.drawVisibility
+      renderState.bindGroups.layouts.drawVisibility
     ]
   });
 
@@ -62,6 +62,7 @@ export function createDrawPacket (device: GPUDevice, format: GPUTextureFormat, r
     pipeline, 
     execute: (pass: GPURenderPassEncoder) => {
       pass.setPipeline(pipeline);
+      pass.setBindGroup(2, renderState.bindGroups.bindGroups.drawVisibility);
 
       pass.setVertexBuffer(0, renderState.geometryBuffer);
       pass.setIndexBuffer(renderState.indexBuffer, 'uint16');

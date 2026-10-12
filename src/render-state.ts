@@ -199,7 +199,7 @@ export function prepareRenderState (device: GPUDevice, instances: number): Rende
   const sharedBindGroups = createSharedBindGroup(device, uniformBuffer, modelBuffer);
   const bindGroups = createBindGroups(device, visibleBuffer, indirectBuffer);
 
-  const drawArgs = new Uint32Array([6, instances, 0, 0, 0]);
+  const drawArgs = new Uint32Array([6, 0, 0, 0, 0]);
   device.queue.writeBuffer(indirectBuffer, 0, drawArgs);
 
 
