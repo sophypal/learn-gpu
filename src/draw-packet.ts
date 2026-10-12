@@ -1,5 +1,5 @@
 import {createQuads} from './geometry.ts';
-import {createRenderPipeline, createCameraBindGroup} from './pipeline.ts';
+import {createRenderPipeline} from './pipeline.ts';
 import {createCameraBuffer} from './camera';
 import {mat4} from 'wgpu-matrix';
 
@@ -8,7 +8,12 @@ export interface DrawPacket {
   pipeline: GPURenderPipeline,
   vertexBuffers: GPUBuffer[],
   indexBuffer: GPUBuffer,
+  indirectBuffer: GPUBuffer,
   bindGroups: GPUBindGroup[],
+  buffers: {
+    uniformBuffer: GPUBuffer,
+    modelBuffer: GPUBuffer
+  },
   execute: (pass: GPURenderPassEncoder) => void
 }
 
@@ -20,6 +25,19 @@ function getRandom (high: number, low: number = 0) {
   return Math.random() * range + low;
 }
 
+export function createRenderBindGroup(device: GPUDevice, pipeline: GPURenderPipeline, uniformBuffer: GPUBuffer, modelBuffer: GPUBuffer) {
+  return device.createBindGroup({
+    layout: pipeline.getBindGroupLayout(0),
+    entries: [{
+      binding: 0,
+      resource: uniformBuffer
+    }, {
+      binding: 1,
+      resource: modelBuffer
+    }]
+  });
+}
+
 export function createDrawPacket (device: GPUDevice, format: GPUTextureFormat, instances: number) {
   const indirectBuffer = device.createBuffer({
     size: 20,
@@ -28,7 +46,7 @@ export function createDrawPacket (device: GPUDevice, format: GPUTextureFormat, i
 
   const modelBuffer = device.createBuffer({
     size: instances * MAT4_SIZE_IN_BYTES,
-    usage: GPUBufferUsage.VERTEX | GPUBufferUsage.COPY_DST,
+    usage: GPUBufferUsage.VERTEX | GPUBufferUsage.STORAGE | GPUBufferUsage.COPY_DST,
     mappedAtCreation: true
   });
 
@@ -45,7 +63,7 @@ export function createDrawPacket (device: GPUDevice, format: GPUTextureFormat, i
   const {geometryBuffer, indexBuffer} = createQuads(device);
   const pipeline = createRenderPipeline(device, format);
   const uniformBuffer = createCameraBuffer(device, window.innerWidth / window.innerHeight);
-  const bindGroup = createCameraBindGroup(device, pipeline, uniformBuffer);
+  const bindGroup = createRenderBindGroup(device, pipeline, uniformBuffer, modelBuffer);
 
   const drawArgs = new Uint32Array([6, instances, 0, 0, 0]);
   device.queue.writeBuffer(indirectBuffer, 0, drawArgs);
@@ -54,17 +72,20 @@ export function createDrawPacket (device: GPUDevice, format: GPUTextureFormat, i
     instances,
     pipeline, 
     vertexBuffers: [
-      geometryBuffer,
-      modelBuffer
+      geometryBuffer
     ],
     indexBuffer,
+    indirectBuffer,
     bindGroups: [bindGroup],
+    buffers: {
+      uniformBuffer,
+      modelBuffer
+    },
     execute: (pass: GPURenderPassEncoder) => {
       pass.setPipeline(pipeline);
       pass.setBindGroup(0, bindGroup);
 
       pass.setVertexBuffer(0, geometryBuffer);
-      pass.setVertexBuffer(1, modelBuffer);
 
       pass.setIndexBuffer(indexBuffer, 'uint16');
       pass.drawIndexedIndirect(indirectBuffer, 0);

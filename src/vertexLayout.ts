@@ -16,24 +16,3 @@ export const meshLayout: GPUVertexBufferLayout = {
     }
   ]
 };
-
-export const MODEL_STRIDE = 4 * Float32Array.BYTES_PER_ELEMENT * 4;
-
-export const modelLayout: GPUVertexBufferLayout = {
-  arrayStride: MODEL_STRIDE ,
-  stepMode: 'instance',
-  attributes: [
-    {
-      shaderLocation: 2, offset: 0, format: 'float32x4',
-    },
-    {
-      shaderLocation: 3, offset: 16, format: 'float32x4',
-    },
-    {
-      shaderLocation: 4, offset: 32, format: 'float32x4',
-    },
-    {
-      shaderLocation: 5, offset: 48, format: 'float32x4'
-    }
-  ]
-};

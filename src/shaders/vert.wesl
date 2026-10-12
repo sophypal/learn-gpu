@@ -5,22 +5,12 @@ struct VertexAttributes {
     @location(1) color: vec4f,
 };
 
-struct InstanceAttributes {
-    @location(2) model0: vec4f,
-    @location(3) model1: vec4f,
-    @location(4) model2: vec4f,
-    @location(5) model3: vec4f
-};
-
 @group(0) @binding(0) var<uniform> viewProjection: mat4x4f;
-
-fn getModelMatrix (in: InstanceAttributes) -> mat4x4f {
-    return mat4x4f(in.model0, in.model1, in.model2, in.model3);
-}
+@group(0) @binding(1) var<storage> model: array<mat4x4f>;
 
 @vertex
-fn vsMain (vertexAttributes: VertexAttributes, instanceAttributes: InstanceAttributes) -> VertexOutput {
-    let modelMatrix: mat4x4f = getModelMatrix(instanceAttributes);
+fn vsMain (vertexAttributes: VertexAttributes, @builtin(instance_index) instance: u32) -> VertexOutput {
+    let modelMatrix: mat4x4f = model[instance];
     var out: VertexOutput;
 
     out.position = viewProjection * modelMatrix * vec4f(vertexAttributes.position,  1.0);

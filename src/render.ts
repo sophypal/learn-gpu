@@ -1,4 +1,5 @@
 import type { DrawPacket } from './draw-packet';
+import type { ComputePacket } from './compute';
 import { DEPTH_FORMAT } from './pipeline';
 
 export function createDepthTexture(device: GPUDevice) {
@@ -14,12 +15,21 @@ interface FrameResources {
   context: GPUCanvasContext;
   depthTexture: GPUTexture;
   drawPacket: DrawPacket;
+  computePacket?: ComputePacket;
 }
 
-export function drawFrame({ device, context, depthTexture, drawPacket }: FrameResources) {
+export function drawFrame({ device, context, depthTexture, drawPacket, /*computePacket*/ }: FrameResources) {
   const commandEncoder = device.createCommandEncoder();
 
-  const pass = commandEncoder.beginRenderPass({
+  /*
+  const computePass = commandEncoder.beginComputePass();
+
+  computePacket.execute(computePass);
+
+  computePass.end();
+  */
+
+  const renderPass = commandEncoder.beginRenderPass({
     colorAttachments: [{
       view: context.getCurrentTexture().createView(),
       loadOp: 'clear',
@@ -36,9 +46,9 @@ export function drawFrame({ device, context, depthTexture, drawPacket }: FrameRe
 
   const {execute} = drawPacket;
 
-  execute(pass);
+  execute(renderPass);
 
-  pass.end();
+  renderPass.end();
 
   const commands = commandEncoder.finish();
   device.queue.submit([commands]);

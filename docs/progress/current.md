@@ -4,17 +4,24 @@ Updated: 2026-10-11 · Last tag: `stage-7-indirect`
 
 ## State
 
-10,000 instanced quads at random positions in a 100-unit volume, drawn every frame by a `requestAnimationFrame` loop with `drawIndexedIndirect`. The 20-byte argument buffer is written once in `createDrawPacket`. The model matrix is per-instance data on vertex slot 1 (locations 2–5). Camera at z = 10, far plane 1000, static.
+10,000 instanced quads drawn every frame with `drawIndexedIndirect`. The model matrices now live in a storage buffer (`var<storage> model: array<mat4x4f>`) read as `model[instance_index]`; the instance vertex buffer and its layout are gone. Camera static at z = 10.
 
-## Now: stage 8, moving camera
+## Now: stage 8, GPU culling
 
-Goal: objects that can leave the view, which culling needs.
+The moving camera was skipped; culling comes first. Compute scaffolding (`src/compute.ts`, `src/shaders/cull.wesl`) exists but isn't wired in (`main.ts` has it commented out).
 
-- [ ] Per frame: rebuild the view matrix and `writeBuffer` it
-- [ ] A camera that moves or rotates
+- [x] Object table in a storage buffer, indexed by `instance_index`
+- [ ] Cull shader: `@group` (not `@global`), `@workgroup_size`, bounds check with `arrayLength`
+- [ ] `'auto'` layout keeps only bindings the entry point uses: the body must touch all three
+- [ ] `instanceCount` as `atomic<u32>`; reset only that field (offset 4, 4 bytes) before the cull pass
+- [ ] `visibleBuffer` sized in bytes (`instances * 4`); dispatch rounded up (`Math.ceil(instances / 64)`)
+- [ ] Indirect buffer gains `STORAGE`
+- [ ] Vertex shader reads `model[visible[instance_index]]`
+- [ ] Wire the compute pass into `drawFrame` before the render pass
 
 ## Open threads
 
+- Moving camera (skipped; needed to see culling actually cull)
 - Who owns a shared draw-argument slab once there's more than one packet (see roadmap, "Discussed")
 - Explicit bind group layouts (0 = per frame, 1 = per material, 2 = per object)
 - Resize handling and `devicePixelRatio` (the depth texture and projection must follow)
