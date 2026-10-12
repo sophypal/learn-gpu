@@ -6,7 +6,7 @@ struct VertexAttributes {
 };
 
 @group(0) @binding(0) var<uniform> viewProjection: mat4x4f;
-@group(0) @binding(1) var<storage> model: array<mat4x4f>;
+@group(1) @binding(0) var<storage> model: array<mat4x4f>;
 
 @vertex
 fn vsMain (vertexAttributes: VertexAttributes, @builtin(instance_index) instance: u32) -> VertexOutput {

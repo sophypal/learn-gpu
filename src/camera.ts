@@ -27,8 +27,9 @@ function createViewProjection(aspect: number) {
 
 export function createCameraBuffer(device: GPUDevice, aspect: number) {
   const uniformBuffer = device.createBuffer({
+    label: 'camera uniform buffer',
     size: 16 * Float32Array.BYTES_PER_ELEMENT,
-    usage: GPUBufferUsage.UNIFORM | GPUBufferUsage.COPY_DST
+    usage: GPUBufferUsage.UNIFORM | GPUBufferUsage.STORAGE | GPUBufferUsage.COPY_DST
   });
 
   device.queue.writeBuffer(uniformBuffer, 0, createViewProjection(aspect));

@@ -1,8 +1,11 @@
 import './style.css';
 import { initGPU } from './gpu';
-import { createDepthTexture, drawFrame } from './render';
+import { drawFrame } from './render';
+import { prepareRenderState } from './render-state';
 import { createDrawPacket } from './draw-packet';
 // import { createComputePacket } from './compute';
+
+const INSTANCES = 10000;
 
 async function init() {
   const canvas = document.querySelector('canvas')!;
@@ -11,12 +14,12 @@ async function init() {
 
   const { device, context, format } = await initGPU(canvas);
 
-  const drawPacket = createDrawPacket(device, format, 10000);
-  // const computePacket = createComputePacket(device, drawPacket);
-  const depthTexture = createDepthTexture(device);
+  const renderState = prepareRenderState(device, INSTANCES);
+  const drawPacket = createDrawPacket(device, format, renderState);
+  // const computePacket = createComputePacket(device, renderState);
 
   const execute = () => {
-    drawFrame({ device, context, depthTexture, drawPacket /*, computePacket */ });
+    drawFrame({ device, context, renderState, drawPacket });
 
     requestAnimationFrame(execute);
   };

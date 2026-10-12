@@ -1,35 +1,30 @@
-import type { DrawPacket } from './draw-packet';
+import { type DrawPacket } from './draw-packet';
 import type { ComputePacket } from './compute';
-import { DEPTH_FORMAT } from './pipeline';
-
-export function createDepthTexture(device: GPUDevice) {
-  return device.createTexture({
-    size: [window.innerWidth, window.innerHeight],
-    format: DEPTH_FORMAT,
-    usage: GPUTextureUsage.RENDER_ATTACHMENT,
-  });
-}
+import { type RenderState } from './render-state';
 
 interface FrameResources {
   device: GPUDevice;
   context: GPUCanvasContext;
-  depthTexture: GPUTexture;
+  renderState: RenderState;
   drawPacket: DrawPacket;
   computePacket?: ComputePacket;
 }
 
-export function drawFrame({ device, context, depthTexture, drawPacket, /*computePacket*/ }: FrameResources) {
-  const commandEncoder = device.createCommandEncoder();
+export function drawFrame({ device, context, renderState, drawPacket, computePacket }: FrameResources) {
+  const commandEncoder = device.createCommandEncoder({label: 'frame encoder'});
 
-  /*
-  const computePass = commandEncoder.beginComputePass();
 
-  computePacket.execute(computePass);
+  if (computePacket) {
+    const computePass = commandEncoder.beginComputePass({label: 'cull pass'});
 
-  computePass.end();
-  */
+    renderState.prepareCompute(computePass);
+    computePacket.execute(computePass);
+
+    computePass.end();
+  }
 
   const renderPass = commandEncoder.beginRenderPass({
+    label: 'render pass',
     colorAttachments: [{
       view: context.getCurrentTexture().createView(),
       loadOp: 'clear',
@@ -37,7 +32,7 @@ export function drawFrame({ device, context, depthTexture, drawPacket, /*compute
       clearValue: {r: 0, g: 0, b: 0, a: 0}
     }],
     depthStencilAttachment: {
-      view: depthTexture,
+      view: renderState.depthTexture,
       depthClearValue: 1.0,
       depthLoadOp: 'clear',
       depthStoreOp: 'store'
@@ -46,10 +41,11 @@ export function drawFrame({ device, context, depthTexture, drawPacket, /*compute
 
   const {execute} = drawPacket;
 
+  renderState.prepareRender(renderPass);
   execute(renderPass);
 
   renderPass.end();
 
-  const commands = commandEncoder.finish();
+  const commands = commandEncoder.finish({label: 'frame commands'});
   device.queue.submit([commands]);
 }
