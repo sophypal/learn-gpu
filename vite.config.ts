@@ -1,3 +1,8 @@
 import { defineConfig } from 'vite';
+import viteWesl from 'wesl-plugin/vite';
 
-export default defineConfig({});
+export default defineConfig({
+    plugins: [
+        viteWesl()
+    ],
+});
