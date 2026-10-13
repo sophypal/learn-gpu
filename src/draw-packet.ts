@@ -5,6 +5,7 @@ import vertexShader from './shaders/vert.wesl?static';
 import fragmentShader from './shaders/frag.wesl?static';
 
 const MAT4_SIZE_IN_BYTES = 64;
+const EXTENTS = 100;
 
 /**
  * Tells the pipeline how to read one instance's model matrix from vertex
@@ -25,8 +26,21 @@ const modelLayout: GPUVertexBufferLayout = {
 };
 
 /**
- * Creates the per-instance buffer: one model matrix per quad, placed in a row
- * 1.5 units apart.
+ * A random number from `low` up to (not including) `high`.
+ *
+ * @example
+ * ```ts
+ * getRandom(50, -50); // somewhere between -50 and 50
+ * ```
+ */
+function getRandom (high: number, low: number = 0) {
+  const range = high - low;
+  return Math.random() * range + low;
+}
+
+/**
+ * Creates the per-instance buffer: one model matrix per quad, scattered
+ * randomly through a 100-unit box in front of the camera.
  *
  * @param device - The GPU device.
  * @param instances - How many quads.
@@ -34,7 +48,7 @@ const modelLayout: GPUVertexBufferLayout = {
  *
  * @example
  * ```ts
- * const modelBuffer = createModelBuffer(device, 5);
+ * const modelBuffer = createModelBuffer(device, 10_000);
  * pass.setVertexBuffer(1, modelBuffer);
  * ```
  */
@@ -47,9 +61,11 @@ function createModelBuffer (device: GPUDevice, instances: number) {
   });
 
   for (let i = 0; i < instances; i++) {
-    const x = (i - (instances - 1) / 2) * 1.5;
+    const x = getRandom(EXTENTS/2, -EXTENTS/2);
+    const y = getRandom(EXTENTS/2, -EXTENTS/2);
+    const z = getRandom(-EXTENTS);
 
-    mat4.translation([x, 0, 0], new Float32Array(modelBuffer.getMappedRange(i*MAT4_SIZE_IN_BYTES, MAT4_SIZE_IN_BYTES)));
+    mat4.translation([x, y, z], new Float32Array(modelBuffer.getMappedRange(i*MAT4_SIZE_IN_BYTES, MAT4_SIZE_IN_BYTES)));
   }
 
   modelBuffer.unmap();
@@ -170,7 +186,7 @@ function createCameraBindGroup(device: GPUDevice, pipeline: GPURenderPipeline, c
  *
  * @example
  * ```ts
- * const drawPacket = createDrawPacket(device, format, cameraBuffer, 5);
+ * const drawPacket = createDrawPacket(device, format, cameraBuffer, 10_000);
  * drawPacket.execute(renderPass);
  * ```
  */
