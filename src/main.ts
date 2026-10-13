@@ -76,10 +76,12 @@ const meshLayout: GPUVertexBufferLayout = {
 
 /* Two triangles sharing the 0-2 diagonal. Counter-clockwise, so back-face culling keeps them. */
 const QUAD_INDICES = [0, 1, 2, 0, 2, 3];
-const VERTEX_COUNT = 4;
+/* Vertices per quad. The second quad starts at vertex 4, which is its baseVertex. */
+const QUAD_VERTEX_COUNT = 4;
+const VERTEX_COUNT = 2 * QUAD_VERTEX_COUNT;
 
 /**
- * Creates the vertex and index buffers for a single quad, -0.5 to 0.5 on x and y.
+ * Creates the vertex and index buffers for two quads, side by side at different depths.
  *
  * We fill both buffers with `mappedAtCreation`: the buffer starts out mapped,
  * we write into `getMappedRange()`, and `unmap()` hands it over to the GPU.
@@ -87,6 +89,9 @@ const VERTEX_COUNT = 4;
  *
  * Position and color share one buffer, so we look at the same bytes two ways:
  * as floats for the position, as bytes for the color.
+ *
+ * Both quads share one index list. The second one is drawn with `baseVertex`
+ * set to 4, so index 0 means vertex 4.
  *
  * @param device - The GPU device.
  * @returns The vertex buffer, the `uint16` index buffer, and the index count.
@@ -96,7 +101,8 @@ const VERTEX_COUNT = 4;
  * const { geometryBuffer, indexBuffer, indexCount } = createQuads(device);
  * pass.setVertexBuffer(0, geometryBuffer);
  * pass.setIndexBuffer(indexBuffer, 'uint16');
- * pass.drawIndexed(indexCount);
+ * pass.drawIndexed(indexCount, 1, 0, 0);                 // first quad
+ * pass.drawIndexed(indexCount, 1, 0, QUAD_VERTEX_COUNT); // second quad
  * ```
  */
 function createQuads(device: GPUDevice) {
@@ -146,10 +152,17 @@ function createQuads(device: GPUDevice) {
     u8.set([randomColor(), randomColor(), randomColor(), 255], index * VERTEX_STRIDE + COLOR_OFFSET);
   }
 
-  setVertex(0, -0.5, -0.5, 0.0);
-  setVertex(1, 0.5, -0.5, 0.0);
-  setVertex(2, 0.5, 0.5, 0.0);
-  setVertex(3, -0.5, 0.5, 0.0);
+  /* Left quad, at z = 0. */
+  setVertex(0, -1.25, -0.5, 0.0);
+  setVertex(1, -0.25, -0.5, 0.0);
+  setVertex(2, -0.25, 0.5, 0.0);
+  setVertex(3, -1.25, 0.5, 0.0);
+
+  /* Right quad, 2 units farther away. */
+  setVertex(4, 0.25, -0.5, -2.0);
+  setVertex(5, 1.25, -0.5, -2.0);
+  setVertex(6, 1.25, 0.5, -2.0);
+  setVertex(7, 0.25, 0.5, -2.0);
 
   geometryBuffer.unmap();
 
@@ -161,7 +174,7 @@ function createQuads(device: GPUDevice) {
 }
 
 /**
- * Creates the pipeline that draws our quad.
+ * Creates the pipeline that draws our quads.
  *
  * A pipeline bundles the shaders with everything fixed about how they run:
  * which entry points, what the vertex input looks like (`meshLayout`), the
@@ -323,7 +336,7 @@ interface FrameResources {
 }
 
 /**
- * Records and submits one frame: clear the canvas, then draw the quad.
+ * Records and submits one frame: clear the canvas, then draw both quads.
  *
  * Nothing runs on the GPU until we submit. The command encoder records
  * commands, `finish()` packs them into a command buffer, and
@@ -354,7 +367,8 @@ function drawFrame({ device, context, pipeline, cameraBindGroup, geometryBuffer,
   renderPass.setBindGroup(0, cameraBindGroup);
   renderPass.setVertexBuffer(0, geometryBuffer);
   renderPass.setIndexBuffer(indexBuffer, 'uint16');
-  renderPass.drawIndexed(indexCount);
+  renderPass.drawIndexed(indexCount, 1, 0, 0);
+  renderPass.drawIndexed(indexCount, 1, 0, QUAD_VERTEX_COUNT);
   renderPass.end();
 
   device.queue.submit([commandEncoder.finish({label: 'frame commands'})]);
