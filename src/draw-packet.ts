@@ -1,4 +1,4 @@
-import { DEPTH_FORMAT, type RenderState } from './render-state.ts';
+import { DEPTH_FORMAT, GroupIndex, type RenderState } from './render-state.ts';
 import { meshLayout } from './geometry.ts';
 import vertexShader from './shaders/vert.wesl?static';
 import fragmentShader from './shaders/frag.wesl?static';
@@ -20,8 +20,9 @@ export interface DrawPacket {
 /**
  * Creates the pipeline that draws the quads.
  *
- * Its layout lists the bind group layouts in `GroupIndex` order: the camera,
- * then the model table.
+ * Its layout lists the bind group layouts in `GroupIndex` order: the camera, the
+ * model table, and the read-only visible list. The vertex shader looks each
+ * instance's matrix up through the visible list.
  *
  * @param device - The GPU device.
  * @param format - The canvas format. The color target has to match it.
@@ -49,7 +50,8 @@ export function createRenderPipeline(device: GPUDevice, format: GPUTextureFormat
     label: 'render pipeline layout',
     bindGroupLayouts: [
       renderState.sharedBindGroups.frame.layout,
-      renderState.sharedBindGroups.entity.layout
+      renderState.sharedBindGroups.entity.layout,
+      renderState.visibilityBindGroups.draw.layout
     ]
   });
 
@@ -85,7 +87,7 @@ export function createRenderPipeline(device: GPUDevice, format: GPUTextureFormat
 /**
  * Creates the draw packet for the quads.
  *
- * `execute` sets what's specific to this draw (pipeline, geometry) and
+ * `execute` sets what's specific to this draw (pipeline, group 2, geometry) and
  * issues one `drawIndexedIndirect` with the arguments from the indirect buffer.
  *
  * Bind groups 0 and 1 first, with `renderState.bindShared`.
@@ -109,6 +111,7 @@ export function createDrawPacket (device: GPUDevice, format: GPUTextureFormat, r
     pipeline,
     execute: (pass: GPURenderPassEncoder) => {
       pass.setPipeline(pipeline);
+      pass.setBindGroup(GroupIndex.visibility, renderState.visibilityBindGroups.draw.bindGroup);
 
       pass.setVertexBuffer(0, renderState.geometryBuffer);
       pass.setIndexBuffer(renderState.indexBuffer, 'uint16');

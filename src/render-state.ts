@@ -20,7 +20,7 @@ export const INDIRECT_ARGS_SIZE = 5 * U32_SIZE_IN_BYTES;
  *
  * The order of layouts in a pipeline layout decides the group numbers, so every
  * pipeline lists its layouts in this order. They go roughly by how often they
- * change: per frame, then per object.
+ * change: per frame, per object, then which objects to draw.
  *
  * @example
  * ```ts
@@ -29,7 +29,8 @@ export const INDIRECT_ARGS_SIZE = 5 * U32_SIZE_IN_BYTES;
  */
 export const GroupIndex = {
   frame: 0,
-  entity: 1
+  entity: 1,
+  visibility: 2
 } as const;
 
 /** A bind group layout and the bind group made from it, kept together. */
@@ -44,6 +45,11 @@ export interface SharedBindGroups {
   entity: BindGroupPair
 }
 
+/** Group 2, the draw side: the vertex shader reads the visible list. */
+export interface VisibilityBindGroups {
+  draw: BindGroupPair
+}
+
 /** What the draw packet uses: buffers, bind groups, and a helper to bind the shared groups. */
 export interface RenderState {
   instances: number,
@@ -54,6 +60,7 @@ export interface RenderState {
   cameraBuffer: GPUBuffer,
   indirectBuffer: GPUBuffer,
   sharedBindGroups: SharedBindGroups,
+  visibilityBindGroups: VisibilityBindGroups,
   /**
    * Binds groups 0 (frame) and 1 (entity) on a pass.
    *
@@ -167,7 +174,7 @@ function createModelBuffer (device: GPUDevice, instances: number) {
  * ```ts
  * const shared = createSharedBindGroups(device, cameraBuffer, modelBuffer);
  * device.createPipelineLayout({
- *   bindGroupLayouts: [shared.frame.layout, shared.entity.layout]
+ *   bindGroupLayouts: [shared.frame.layout, shared.entity.layout, visibility.draw.layout]
  * });
  * ```
  */
@@ -211,10 +218,46 @@ function createSharedBindGroups (device: GPUDevice, cameraBuffer: GPUBuffer, mod
 }
 
 /**
+ * Creates group 2 for the draw: the visible list, read-only, at binding 0.
+ *
+ * @param device - The GPU device.
+ * @param visibleBuffer - One u32 object index per visible object.
+ * @returns Layout and bind group for group 2, draw side.
+ *
+ * @example
+ * ```ts
+ * const visibility = createVisibilityBindGroups(device, visibleBuffer);
+ * renderPass.setBindGroup(GroupIndex.visibility, visibility.draw.bindGroup);
+ * ```
+ */
+function createVisibilityBindGroups (device: GPUDevice, visibleBuffer: GPUBuffer): VisibilityBindGroups {
+  const drawLayout = device.createBindGroupLayout({
+    label: 'group 2 layout: draw visibility',
+    entries: [{
+      binding: 0,
+      visibility: GPUShaderStage.VERTEX,
+      buffer: { type: 'read-only-storage' }
+    }]
+  });
+
+  return {
+    draw: {
+      layout: drawLayout,
+      bindGroup: device.createBindGroup({
+        label: 'group 2: draw visibility',
+        layout: drawLayout,
+        entries: [{ binding: 0, resource: visibleBuffer }]
+      })
+    }
+  };
+}
+
+/**
  * Creates all the shared buffers and bind groups for the scene.
  *
- * The camera and the object table get explicit bind group layouts here, so
- * pipelines can share them instead of each building its own with `'auto'`.
+ * The draw runs `instanceCount` instances, and the vertex shader looks each one
+ * up with `model[visibleList[instance_index]]`. Nothing fills the visible list
+ * yet.
  *
  * @param device - The GPU device.
  * @param instances - How many objects in the scene.
@@ -232,6 +275,16 @@ export function prepareRenderState (device: GPUDevice, instances: number): Rende
   const cameraBuffer = createCameraBuffer(device, window.innerWidth / window.innerHeight);
   const modelBuffer = createModelBuffer(device, instances);
 
+  /*
+   * One u32 object index per visible object, sized for the worst case: all visible.
+   * Its size is the capacity; this frame's length is instanceCount.
+   */
+  const visibleBuffer = device.createBuffer({
+    label: 'visible list buffer',
+    size: instances * U32_SIZE_IN_BYTES,
+    usage: GPUBufferUsage.STORAGE
+  });
+
   const indirectBuffer = device.createBuffer({
     label: 'indirect args buffer',
     size: INDIRECT_ARGS_SIZE,
@@ -242,6 +295,7 @@ export function prepareRenderState (device: GPUDevice, instances: number): Rende
   device.queue.writeBuffer(indirectBuffer, 0, new Uint32Array([indexCount, instances, 0, 0, 0]));
 
   const sharedBindGroups = createSharedBindGroups(device, cameraBuffer, modelBuffer);
+  const visibilityBindGroups = createVisibilityBindGroups(device, visibleBuffer);
 
   return {
     instances,
@@ -252,6 +306,7 @@ export function prepareRenderState (device: GPUDevice, instances: number): Rende
     cameraBuffer,
     indirectBuffer,
     sharedBindGroups,
+    visibilityBindGroups,
     /* GPUBindingCommandsMixin covers render and compute passes alike. */
     bindShared: (pass: GPUBindingCommandsMixin) => {
       pass.setBindGroup(GroupIndex.frame, sharedBindGroups.frame.bindGroup);
