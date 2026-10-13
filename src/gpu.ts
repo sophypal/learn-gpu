@@ -1,3 +1,19 @@
+/**
+ * Gets a GPU device and hooks the canvas up to it.
+ *
+ * The adapter is the GPU itself. The device is our connection to it, and
+ * everything else (buffers, textures, pipelines) gets created from the device.
+ *
+ * @param canvas - The canvas we draw into.
+ * @returns The device, the canvas context, and the canvas format. A render
+ *   pipeline's color target has to use that format.
+ * @throws If the browser doesn't support WebGPU or can't find a GPU.
+ *
+ * @example
+ * ```ts
+ * const { device, context, format } = await initGPU(canvas);
+ * ```
+ */
 export async function initGPU(canvas: HTMLCanvasElement) {
   if (!navigator.gpu) {
     throw new Error('WebGPU is not supported in this browser.');
@@ -15,6 +31,11 @@ export async function initGPU(canvas: HTMLCanvasElement) {
   context.configure({
     device,
     format,
+    /*
+     * 'opaque' ignores the canvas's alpha channel, so the page behind never shows
+     * through. With 'premultiplied', alpha below 1 would blend with the page, and
+     * colors would have to be premultiplied by alpha first.
+     */
     alphaMode: 'opaque'
   });
 
