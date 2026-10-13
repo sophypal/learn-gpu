@@ -1,4 +1,5 @@
 import './style.css';
+import shaderCode from './shaders/shader.wesl?static';
 
 /**
  * Gets a GPU device and hooks the canvas up to it.
@@ -44,27 +45,71 @@ async function initGPU(canvas: HTMLCanvasElement) {
   return { device, context, format };
 }
 
+/**
+ * Creates the pipeline that draws our triangle.
+ *
+ * A pipeline bundles the shaders with everything fixed about how they run:
+ * which entry points, what the vertex input looks like (nothing yet), the
+ * primitive type, and the format of the texture we draw into.
+ *
+ * @param device - The GPU device.
+ * @param format - The canvas format. The color target has to match it.
+ * @returns The render pipeline.
+ *
+ * @example
+ * ```ts
+ * const pipeline = createRenderPipeline(device, format);
+ * renderPass.setPipeline(pipeline);
+ * ```
+ */
+function createRenderPipeline(device: GPUDevice, format: GPUTextureFormat) {
+  const shaderModule = device.createShaderModule({
+    label: 'shader.wesl',
+    code: shaderCode
+  });
+
+  return device.createRenderPipeline({
+    label: 'render pipeline',
+    layout: 'auto',
+    vertex: {
+      module: shaderModule,
+      entryPoint: 'vsMain'
+    },
+    fragment: {
+      module: shaderModule,
+      entryPoint: 'fsMain',
+      targets: [{
+        format
+      }]
+    },
+    primitive: {
+      topology: 'triangle-list'
+    }
+  });
+}
+
 /** What one frame needs. */
 interface FrameResources {
   device: GPUDevice;
   context: GPUCanvasContext;
+  pipeline: GPURenderPipeline;
 }
 
 /**
- * Records and submits one frame. For now a frame only clears the canvas.
+ * Records and submits one frame: clear the canvas, then draw the triangle.
  *
  * Nothing runs on the GPU until we submit. The command encoder records
  * commands, `finish()` packs them into a command buffer, and
  * `queue.submit` hands that to the GPU.
  *
- * @param resources - The device and the canvas context.
+ * @param resources - The device, the canvas context, and the pipeline.
  *
  * @example
  * ```ts
- * drawFrame({ device, context });
+ * drawFrame({ device, context, pipeline });
  * ```
  */
-function drawFrame({ device, context }: FrameResources) {
+function drawFrame({ device, context, pipeline }: FrameResources) {
   const commandEncoder = device.createCommandEncoder({label: 'frame encoder'});
 
   const renderPass = commandEncoder.beginRenderPass({
@@ -78,6 +123,8 @@ function drawFrame({ device, context }: FrameResources) {
     }]
   });
 
+  renderPass.setPipeline(pipeline);
+  renderPass.draw(3);
   renderPass.end();
 
   device.queue.submit([commandEncoder.finish({label: 'frame commands'})]);
@@ -96,9 +143,10 @@ async function init() {
   canvas.width = window.innerWidth;
   canvas.height = window.innerHeight;
 
-  const { device, context } = await initGPU(canvas);
+  const { device, context, format } = await initGPU(canvas);
+  const pipeline = createRenderPipeline(device, format);
 
-  drawFrame({ device, context });
+  drawFrame({ device, context, pipeline });
 }
 
 init();
