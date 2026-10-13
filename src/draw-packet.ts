@@ -15,24 +15,6 @@ const EXTENTS = 100;
 const INDIRECT_ARGS_SIZE = 5 * U32_SIZE_IN_BYTES;
 
 /**
- * Tells the pipeline how to read one instance's model matrix from vertex
- * buffer slot 1: four `float32x4` columns at locations 2-5.
- *
- * `stepMode: 'instance'` means the buffer advances once per instance instead
- * of once per vertex, so all four corners of a quad get the same matrix.
- */
-const modelLayout: GPUVertexBufferLayout = {
-  arrayStride: MAT4_SIZE_IN_BYTES,
-  stepMode: 'instance',
-  attributes: [
-    { shaderLocation: 2, offset: 0, format: 'float32x4' },
-    { shaderLocation: 3, offset: 16, format: 'float32x4' },
-    { shaderLocation: 4, offset: 32, format: 'float32x4' },
-    { shaderLocation: 5, offset: 48, format: 'float32x4' }
-  ]
-};
-
-/**
  * A random number from `low` up to (not including) `high`.
  *
  * @example
@@ -46,24 +28,30 @@ function getRandom (high: number, low: number = 0) {
 }
 
 /**
- * Creates the per-instance buffer: one model matrix per quad, scattered
- * randomly through a 100-unit box in front of the camera.
+ * Creates the object table: one model matrix per object, scattered randomly
+ * through a 100-unit box in front of the camera.
+ *
+ * This has to be a storage buffer. 10,000 matrices at 64 bytes each is 640 KB,
+ * and uniform buffers are only guaranteed 64 KB. Storage also lets the shader
+ * declare `array<mat4x4f>` without a length; the length comes from the buffer.
+ *
+ * The vertex shader reads it at `@group(0) @binding(1)`.
  *
  * @param device - The GPU device.
- * @param instances - How many quads.
- * @returns A vertex buffer of `instances` column-major `mat4x4f`s.
+ * @param instances - How many objects.
+ * @returns A storage buffer of `instances` column-major `mat4x4f`s.
  *
  * @example
  * ```ts
  * const modelBuffer = createModelBuffer(device, 10_000);
- * pass.setVertexBuffer(1, modelBuffer);
+ * // in WGSL, model[i][3].xyz is object i's position (the translation column)
  * ```
  */
 function createModelBuffer (device: GPUDevice, instances: number) {
   const modelBuffer = device.createBuffer({
     label: 'model buffer',
     size: instances * MAT4_SIZE_IN_BYTES,
-    usage: GPUBufferUsage.VERTEX,
+    usage: GPUBufferUsage.STORAGE,
     mappedAtCreation: true
   });
 
@@ -128,7 +116,7 @@ export function createRenderPipeline(device: GPUDevice, format: GPUTextureFormat
     vertex: {
       module: vertexShaderModule,
       entryPoint: 'vsMain',
-      buffers: [meshLayout, modelLayout]
+      buffers: [meshLayout]
     },
     fragment: {
       module: fragmentShaderModule,
@@ -152,8 +140,8 @@ export function createRenderPipeline(device: GPUDevice, format: GPUTextureFormat
 }
 
 /**
- * Creates the bind group that hands the camera buffer to the shader at
- * `@group(0) @binding(0)`.
+ * Creates the bind group for group 0: the camera at binding 0 and the object
+ * table at binding 1.
  *
  * The pipeline uses `layout: 'auto'`, so it works out its bind group layouts
  * from the shader. We ask it for group 0's layout and build the bind group
@@ -162,19 +150,23 @@ export function createRenderPipeline(device: GPUDevice, format: GPUTextureFormat
  * @param device - The GPU device.
  * @param pipeline - The render pipeline whose group 0 this fills.
  * @param cameraBuffer - The camera's uniform buffer.
+ * @param modelBuffer - The object table.
  * @returns The bind group for group 0.
  *
  * @example
  * ```ts
- * const cameraBindGroup = createCameraBindGroup(device, pipeline, cameraBuffer);
- * renderPass.setBindGroup(0, cameraBindGroup);
+ * const bindGroup = createRenderBindGroup(device, pipeline, cameraBuffer, modelBuffer);
+ * renderPass.setBindGroup(0, bindGroup);
  * ```
  */
-function createCameraBindGroup(device: GPUDevice, pipeline: GPURenderPipeline, cameraBuffer: GPUBuffer) {
+function createRenderBindGroup(device: GPUDevice, pipeline: GPURenderPipeline, cameraBuffer: GPUBuffer, modelBuffer: GPUBuffer) {
   return device.createBindGroup({
-    label: 'group 0: camera',
+    label: 'group 0: camera and models',
     layout: pipeline.getBindGroupLayout(0),
-    entries: [{ binding: 0, resource: cameraBuffer }]
+    entries: [
+      { binding: 0, resource: cameraBuffer },
+      { binding: 1, resource: modelBuffer }
+    ]
   });
 }
 
@@ -182,8 +174,8 @@ function createCameraBindGroup(device: GPUDevice, pipeline: GPURenderPipeline, c
  * Creates the draw packet for our quads: everything one kind of draw needs,
  * and a function that records it.
  *
- * `execute` sets the pipeline, the camera bind group, the quad and the
- * per-instance matrices, and draws every quad with one `drawIndexedIndirect`.
+ * `execute` sets the pipeline, the bind group (camera and object table) and
+ * the quad, and draws every quad with one `drawIndexedIndirect`.
  * The draw's arguments live in a GPU buffer, written once here, instead of
  * being passed to the call.
  *
@@ -201,9 +193,9 @@ function createCameraBindGroup(device: GPUDevice, pipeline: GPURenderPipeline, c
  */
 export function createDrawPacket (device: GPUDevice, format: GPUTextureFormat, cameraBuffer: GPUBuffer, instances: number): DrawPacket {
   const pipeline = createRenderPipeline(device, format);
-  const cameraBindGroup = createCameraBindGroup(device, pipeline, cameraBuffer);
   const { geometryBuffer, indexBuffer, indexCount } = createQuads(device);
   const modelBuffer = createModelBuffer(device, instances);
+  const bindGroup = createRenderBindGroup(device, pipeline, cameraBuffer, modelBuffer);
 
   const indirectBuffer = device.createBuffer({
     label: 'indirect args buffer',
@@ -218,10 +210,9 @@ export function createDrawPacket (device: GPUDevice, format: GPUTextureFormat, c
     pipeline,
     execute: (pass: GPURenderPassEncoder) => {
       pass.setPipeline(pipeline);
-      pass.setBindGroup(0, cameraBindGroup);
+      pass.setBindGroup(0, bindGroup);
 
       pass.setVertexBuffer(0, geometryBuffer);
-      pass.setVertexBuffer(1, modelBuffer);
       pass.setIndexBuffer(indexBuffer, 'uint16');
       pass.drawIndexedIndirect(indirectBuffer, 0);
     }
