@@ -1,4 +1,4 @@
-import { GroupOrder, Groups, type RenderState } from './render-state';
+import { GroupIndex, type RenderState } from './render-state';
 import computeShader from './shaders/cull.wesl?static';
 
 export interface ComputePacket {
@@ -13,9 +13,9 @@ export function createComputePipeline (device: GPUDevice, renderState: RenderSta
   const pipelineLayout = device.createPipelineLayout({
     label: 'cull pipeline layout',
     bindGroupLayouts: [
-      renderState.sharedBindGroups.layouts.frame,
-      renderState.sharedBindGroups.layouts.entity,
-      renderState.bindGroups.layouts.computeVisibility
+      renderState.sharedBindGroups.frame.layout,
+      renderState.sharedBindGroups.entity.layout,
+      renderState.visibilityBindGroups.compute.layout
     ]
   });
 
@@ -34,13 +34,13 @@ export function createComputePipeline (device: GPUDevice, renderState: RenderSta
   return pipeline;
 }
 
-export function createComputePacket (device: GPUDevice, renderState: RenderState) {
+export function createComputePacket (device: GPUDevice, renderState: RenderState): ComputePacket {
   const pipeline = createComputePipeline(device, renderState);
 
   return {
     execute: (pass: GPUComputePassEncoder) => {
       pass.setPipeline(pipeline);
-      pass.setBindGroup(GroupOrder.computeVisibility, renderState.bindGroups.bindGroups[Groups.ComputeVisibility]);
+      pass.setBindGroup(GroupIndex.visibility, renderState.visibilityBindGroups.compute.bindGroup);
       pass.dispatchWorkgroups(Math.ceil(renderState.instances / WORKGROUP_SIZE));
     }
   };

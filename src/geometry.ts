@@ -1,5 +1,3 @@
-const VERTEX_COUNT = 8;
-
 // Single source of truth for the vertex format: position (float32x3) + color (unorm8x4).
 // Used both when writing vertex data and when describing it to the pipeline.
 export const VERTEX_STRIDE = 3 * Float32Array.BYTES_PER_ELEMENT + 4 * Uint8Array.BYTES_PER_ELEMENT;
@@ -19,19 +17,21 @@ export const meshLayout: GPUVertexBufferLayout = {
   ]
 };
 
+const QUAD_INDICES = [0, 1, 2, 0, 2, 3];
+const VERTEX_COUNT = 4;
 
 export function createQuads(device: GPUDevice) {
   const geometryBuffer = device.createBuffer({
     label: 'quad vertex buffer',
     size: VERTEX_STRIDE * VERTEX_COUNT,
-    usage: GPUBufferUsage.VERTEX | GPUBufferUsage.COPY_DST,
+    usage: GPUBufferUsage.VERTEX,
     mappedAtCreation: true
   });
 
   const indexBuffer = device.createBuffer({
     label: 'quad index buffer',
-    size: 6 * Uint16Array.BYTES_PER_ELEMENT,
-    usage: GPUBufferUsage.INDEX | GPUBufferUsage.COPY_DST,
+    size: QUAD_INDICES.length * Uint16Array.BYTES_PER_ELEMENT,
+    usage: GPUBufferUsage.INDEX,
     mappedAtCreation: true
   });
 
@@ -40,12 +40,12 @@ export function createQuads(device: GPUDevice) {
   const u8 = new Uint8Array(vertices);
 
   function randomColor () {
-    return Math.floor(Math.random() * 255);
+    return Math.floor(Math.random() * 256);
   }
 
   function setVertex (index: number, x: number, y: number, z: number) {
     f32.set([x, y, z], index * FLOAT_STRIDE);
-    u8.set([randomColor(), randomColor(), randomColor(), randomColor()], index * VERTEX_STRIDE + COLOR_OFFSET);
+    u8.set([randomColor(), randomColor(), randomColor(), 255], index * VERTEX_STRIDE + COLOR_OFFSET);
   }
 
   setVertex(0, -0.5, -0.5, 0.0);
@@ -55,9 +55,9 @@ export function createQuads(device: GPUDevice) {
 
   geometryBuffer.unmap();
 
-  new Uint16Array(indexBuffer.getMappedRange()).set([0, 1, 2, 0, 2, 3]);
+  new Uint16Array(indexBuffer.getMappedRange()).set(QUAD_INDICES);
 
   indexBuffer.unmap();
 
-  return { geometryBuffer, indexBuffer };
+  return { geometryBuffer, indexBuffer, indexCount: QUAD_INDICES.length };
 }

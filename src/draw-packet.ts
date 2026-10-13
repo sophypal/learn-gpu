@@ -1,4 +1,4 @@
-import { DEPTH_FORMAT, type RenderState } from './render-state.ts';
+import { DEPTH_FORMAT, GroupIndex, type RenderState } from './render-state.ts';
 import { meshLayout } from './geometry.ts';
 import vertexShader from './shaders/vert.wesl?static';
 import fragmentShader from './shaders/frag.wesl?static';
@@ -22,9 +22,9 @@ export function createRenderPipeline(device: GPUDevice, format: GPUTextureFormat
   const layout = device.createPipelineLayout({
     label: 'render pipeline layout',
     bindGroupLayouts: [
-      renderState.sharedBindGroups.layouts.frame,
-      renderState.sharedBindGroups.layouts.entity,
-      renderState.bindGroups.layouts.drawVisibility
+      renderState.sharedBindGroups.frame.layout,
+      renderState.sharedBindGroups.entity.layout,
+      renderState.visibilityBindGroups.draw.layout
     ]
   });
 
@@ -55,14 +55,14 @@ export function createRenderPipeline(device: GPUDevice, format: GPUTextureFormat
   });
 }
 
-export function createDrawPacket (device: GPUDevice, format: GPUTextureFormat, renderState: RenderState) {
+export function createDrawPacket (device: GPUDevice, format: GPUTextureFormat, renderState: RenderState): DrawPacket {
   const pipeline = createRenderPipeline(device, format, renderState);
 
   return {
-    pipeline, 
+    pipeline,
     execute: (pass: GPURenderPassEncoder) => {
       pass.setPipeline(pipeline);
-      pass.setBindGroup(2, renderState.bindGroups.bindGroups.drawVisibility);
+      pass.setBindGroup(GroupIndex.visibility, renderState.visibilityBindGroups.draw.bindGroup);
 
       pass.setVertexBuffer(0, renderState.geometryBuffer);
       pass.setIndexBuffer(renderState.indexBuffer, 'uint16');

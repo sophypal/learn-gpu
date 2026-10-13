@@ -1,4 +1,5 @@
 override WORKGROUP_SIZE: u32 = 64;
+// Below 1.0, shrinks the on-screen bound so culling can be seen. Testing only.
 override CULL_SCALE: f32 = 1.0;
 
 struct IndirectDrawArgs {
@@ -16,22 +17,25 @@ struct IndirectDrawArgs {
 
 @compute
 @workgroup_size(WORKGROUP_SIZE)
-fn csMain (
-    @builtin(global_invocation_id) globalIndex: vec3u,
-    @builtin(local_invocation_id) localIndex: vec3u
-) {
-    if (globalIndex.x >= arrayLength(&entityModel)) {
+fn csMain (@builtin(global_invocation_id) globalIndex: vec3u) {
+    let index = globalIndex.x;
+
+    // The dispatch is rounded up to whole workgroups; extra invocations do nothing.
+    if (index >= arrayLength(&entityModel)) {
         return;
     }
 
-    let clip  = viewProjection * entityModel[globalIndex.x][3];
-    let w = clip.w * CULL_SCALE;
+    // The object's origin (translation column) in clip space.
+    let clip = viewProjection * entityModel[index][3];
+    let edge = clip.w * CULL_SCALE;
 
-    let inside = all(abs(clip.xy) <= vec2f(w)) && clip.z >= 0.0 && clip.z <= clip.w;
+    // Before the divide by w: |x|, |y| <= w on screen, and 0 <= z <= w (WebGPU depth is 0..1).
+    let inside = all(abs(clip.xy) <= vec2f(edge)) && clip.z >= 0.0 && clip.z <= clip.w;
     if (!inside) {
         return;
     }
 
+    // atomicAdd returns the count before the add: a slot no other invocation gets.
     let slot = atomicAdd(&indirectDrawArgs.instanceCount, 1u);
-    visibleList[slot] = globalIndex.x;
+    visibleList[slot] = index;
 }
