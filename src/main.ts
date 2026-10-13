@@ -1,7 +1,7 @@
 import './style.css';
 import { initGPU } from './gpu';
-import { createCameraBuffer } from './camera';
-import { createDepthTexture, drawFrame } from './render';
+import { drawFrame } from './render';
+import { prepareRenderState } from './render-state';
 import { createDrawPacket } from './draw-packet';
 
 /* Number of quads in the scene. */
@@ -21,16 +21,16 @@ async function init() {
   canvas.height = window.innerHeight;
 
   const { device, context, format } = await initGPU(canvas);
-  const depthTexture = createDepthTexture(device);
-  const cameraBuffer = createCameraBuffer(device, window.innerWidth / window.innerHeight);
-  const drawPacket = createDrawPacket(device, format, cameraBuffer, INSTANCES);
+
+  const renderState = prepareRenderState(device, INSTANCES);
+  const drawPacket = createDrawPacket(device, format, renderState);
 
   /**
    * One frame of the loop: draw, then ask the browser for the next frame.
    * `requestAnimationFrame` calls this once per screen refresh.
    */
   const execute = () => {
-    drawFrame({ device, context, depthTexture, drawPacket });
+    drawFrame({ device, context, renderState, drawPacket });
 
     requestAnimationFrame(execute);
   };

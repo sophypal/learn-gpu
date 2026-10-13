@@ -7,11 +7,11 @@ struct VertexAttributes {
 };
 
 /*
- * group 0, binding 0: the camera matrix, the same for every vertex.
- * group 0, binding 1: every object's model matrix.
+ * group 0 (frame):  the camera, projection * view.
+ * group 1 (entity): every object's model matrix.
  */
 @group(0) @binding(0) var<uniform> viewProjection: mat4x4f;
-@group(0) @binding(1) var<storage, read> model: array<mat4x4f>;
+@group(1) @binding(0) var<storage, read> model: array<mat4x4f>;
 
 /*
  * Runs once per (vertex, instance). The draw runs instanceCount instances, so

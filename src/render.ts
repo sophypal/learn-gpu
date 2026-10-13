@@ -1,58 +1,30 @@
 import type { DrawPacket } from './draw-packet';
-
-/** Depth format. The depth texture and the render pipeline have to agree on it. */
-export const DEPTH_FORMAT: GPUTextureFormat = 'depth24plus';
-
-/**
- * Creates the depth texture. The render pass keeps the nearest fragment per
- * pixel in it, so close quads hide far ones no matter what order they're drawn in.
- *
- * It has to be the same size as the canvas. We only create it once at the
- * window's size, so resizing isn't handled yet.
- *
- * @param device - The GPU device.
- * @returns A `DEPTH_FORMAT` texture to use as the render pass's depth attachment.
- *
- * @example
- * ```ts
- * const depthTexture = createDepthTexture(device);
- * // in beginRenderPass:
- * // depthStencilAttachment: { view: depthTexture.createView(), ... }
- * ```
- */
-export function createDepthTexture(device: GPUDevice) {
-  return device.createTexture({
-    label: 'depth texture',
-    size: [window.innerWidth, window.innerHeight],
-    format: DEPTH_FORMAT,
-    usage: GPUTextureUsage.RENDER_ATTACHMENT,
-  });
-}
+import type { RenderState } from './render-state';
 
 /** What one frame needs. */
 interface FrameResources {
   device: GPUDevice;
   context: GPUCanvasContext;
-  depthTexture: GPUTexture;
+  renderState: RenderState;
   drawPacket: DrawPacket;
 }
 
 /**
- * Records and submits one frame: clear the canvas and the depth buffer, then
- * let the draw packet record its draws.
+ * Records and submits one frame: clear the canvas and the depth buffer, bind
+ * the shared groups, and let the draw packet record its draw.
  *
- * Nothing runs on the GPU until we submit. The command encoder records
- * commands, `finish()` packs them into a command buffer, and
- * `queue.submit` hands that to the GPU.
- *
- * @param resources - The device, the canvas context, the depth texture, and the draw packet.
+ * @param resources - The device, canvas context, render state, and draw packet.
  *
  * @example
  * ```ts
- * drawFrame({ device, context, depthTexture, drawPacket });
+ * function frame() {
+ *   drawFrame({ device, context, renderState, drawPacket });
+ *   requestAnimationFrame(frame);
+ * }
+ * requestAnimationFrame(frame);
  * ```
  */
-export function drawFrame({ device, context, depthTexture, drawPacket }: FrameResources) {
+export function drawFrame({ device, context, renderState, drawPacket }: FrameResources) {
   const commandEncoder = device.createCommandEncoder({label: 'frame encoder'});
 
   const renderPass = commandEncoder.beginRenderPass({
@@ -65,13 +37,14 @@ export function drawFrame({ device, context, depthTexture, drawPacket }: FrameRe
       clearValue: {r: 0, g: 0, b: 0, a: 1}
     }],
     depthStencilAttachment: {
-      view: depthTexture.createView(),
+      view: renderState.depthTexture.createView(),
       depthClearValue: 1.0,
       depthLoadOp: 'clear',
       depthStoreOp: 'store'
     }
   });
 
+  renderState.bindShared(renderPass);
   drawPacket.execute(renderPass);
   renderPass.end();
 
