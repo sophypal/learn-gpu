@@ -3,6 +3,7 @@ import { initGPU } from './gpu';
 import { drawFrame } from './render';
 import { prepareRenderState } from './render-state';
 import { createDrawPacket } from './draw-packet';
+import { createComputePacket } from './compute';
 
 /* Number of quads in the scene. */
 const INSTANCES = 10000;
@@ -24,13 +25,14 @@ async function init() {
 
   const renderState = prepareRenderState(device, INSTANCES);
   const drawPacket = createDrawPacket(device, format, renderState);
+  const computePacket = createComputePacket(device, renderState);
 
   /**
    * One frame of the loop: draw, then ask the browser for the next frame.
    * `requestAnimationFrame` calls this once per screen refresh.
    */
   const execute = () => {
-    drawFrame({ device, context, renderState, drawPacket });
+    drawFrame({ device, context, renderState, drawPacket, computePacket });
 
     requestAnimationFrame(execute);
   };

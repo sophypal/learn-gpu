@@ -14,13 +14,15 @@ export const DEPTH_FORMAT: GPUTextureFormat = 'depth24plus';
  * five u32s: `indexCount, instanceCount, firstIndex, baseVertex, firstInstance`.
  */
 export const INDIRECT_ARGS_SIZE = 5 * U32_SIZE_IN_BYTES;
+/** Where `instanceCount` sits in the indirect arguments. The cull pass writes it; each frame resets it. */
+export const INSTANCE_COUNT_OFFSET = 1 * U32_SIZE_IN_BYTES;
 
 /**
  * Bind group numbers, matching `@group(N)` in the shaders.
  *
  * The order of layouts in a pipeline layout decides the group numbers, so every
  * pipeline lists its layouts in this order. They go roughly by how often they
- * change: per frame, per object, then which objects to draw.
+ * change: per frame, per object, then the cull results.
  *
  * @example
  * ```ts
@@ -39,18 +41,19 @@ interface BindGroupPair {
   bindGroup: GPUBindGroup
 }
 
-/** Groups 0 and 1, with explicit layouts so any pipeline can share them. */
+/** Groups 0 and 1. Both pipelines use them the same way, so they share them. */
 export interface SharedBindGroups {
   frame: BindGroupPair,
   entity: BindGroupPair
 }
 
-/** Group 2, the draw side: the vertex shader reads the visible list. */
+/** Group 2, one per pipeline. Compute writes the visible list; the vertex shader only reads it. */
 export interface VisibilityBindGroups {
+  compute: BindGroupPair,
   draw: BindGroupPair
 }
 
-/** What the draw packet uses: buffers, bind groups, and a helper to bind the shared groups. */
+/** What the cull and draw packets share: buffers, bind groups, and a helper to bind the shared groups. */
 export interface RenderState {
   instances: number,
   indexCount: number,
@@ -62,10 +65,11 @@ export interface RenderState {
   sharedBindGroups: SharedBindGroups,
   visibilityBindGroups: VisibilityBindGroups,
   /**
-   * Binds groups 0 (frame) and 1 (entity) on a pass.
+   * Binds groups 0 (frame) and 1 (entity) on a compute or render pass.
    *
    * @example
    * ```ts
+   * renderState.bindShared(computePass);
    * renderState.bindShared(renderPass);
    * ```
    */
@@ -119,7 +123,7 @@ export function createDepthTexture(device: GPUDevice) {
  * and uniform buffers are only guaranteed 64 KB. Storage also lets the shader
  * declare `array<mat4x4f>` without a length; the length comes from the buffer.
  *
- * The vertex shader reads it at `@group(1) @binding(0)`.
+ * The cull pass and the vertex shader both read it at `@group(1) @binding(0)`.
  *
  * @param device - The GPU device.
  * @param instances - How many objects.
@@ -153,12 +157,11 @@ function createModelBuffer (device: GPUDevice, instances: number) {
 }
 
 /**
- * Creates groups 0 and 1 with explicit layouts.
+ * Creates groups 0 and 1, which the cull and render pipelines bind the same way.
  *
- * With `layout: 'auto'`, each pipeline gets layouts of its own that no other
- * pipeline can use. Explicit layouts can be shared: any pipeline whose layout
- * lists these exact objects at the same group numbers can use these bind
- * groups. Visibility says which shader stages may read them.
+ * Sharing works because both pipeline layouts use these exact layout objects at
+ * the same group numbers, so one bind group fits both pipelines. Visibility
+ * includes VERTEX and COMPUTE since both stages read them.
  *
  * | Group | Binding | Resource      | Type                |
  * |-------|---------|---------------|---------------------|
@@ -183,7 +186,7 @@ function createSharedBindGroups (device: GPUDevice, cameraBuffer: GPUBuffer, mod
     label: 'group 0 layout: frame',
     entries: [{
       binding: 0,
-      visibility: GPUShaderStage.VERTEX,
+      visibility: GPUShaderStage.VERTEX | GPUShaderStage.COMPUTE,
       buffer: { type: 'uniform' }
     }]
   });
@@ -192,7 +195,7 @@ function createSharedBindGroups (device: GPUDevice, cameraBuffer: GPUBuffer, mod
     label: 'group 1 layout: entity',
     entries: [{
       binding: 0,
-      visibility: GPUShaderStage.VERTEX,
+      visibility: GPUShaderStage.VERTEX | GPUShaderStage.COMPUTE,
       buffer: { type: 'read-only-storage' }
     }]
   });
@@ -218,19 +221,45 @@ function createSharedBindGroups (device: GPUDevice, cameraBuffer: GPUBuffer, mod
 }
 
 /**
- * Creates group 2 for the draw: the visible list, read-only, at binding 0.
+ * Creates group 2 twice, once for each pipeline, over the same two buffers.
+ *
+ * We can't share this one. The cull pass writes the visible list and the vertex
+ * shader only reads it, and a layout entry only has one type. On top of that, a
+ * writable storage binding can't be visible to the vertex stage. So each
+ * pipeline gets its own layout at group 2.
+ *
+ * | Layout  | Binding | Resource      | Type                |
+ * |---------|---------|---------------|---------------------|
+ * | compute | 0       | visible list  | `storage`           |
+ * | compute | 1       | indirect args | `storage`           |
+ * | draw    | 0       | visible list  | `read-only-storage` |
  *
  * @param device - The GPU device.
  * @param visibleBuffer - One u32 object index per visible object.
- * @returns Layout and bind group for group 2, draw side.
+ * @param indirectBuffer - The arguments for `drawIndexedIndirect`.
+ * @returns Layout and bind group for group 2, compute side and draw side.
  *
  * @example
  * ```ts
- * const visibility = createVisibilityBindGroups(device, visibleBuffer);
+ * const visibility = createVisibilityBindGroups(device, visibleBuffer, indirectBuffer);
+ * computePass.setBindGroup(GroupIndex.visibility, visibility.compute.bindGroup);
  * renderPass.setBindGroup(GroupIndex.visibility, visibility.draw.bindGroup);
  * ```
  */
-function createVisibilityBindGroups (device: GPUDevice, visibleBuffer: GPUBuffer): VisibilityBindGroups {
+function createVisibilityBindGroups (device: GPUDevice, visibleBuffer: GPUBuffer, indirectBuffer: GPUBuffer): VisibilityBindGroups {
+  const computeLayout = device.createBindGroupLayout({
+    label: 'group 2 layout: compute visibility',
+    entries: [{
+      binding: 0,
+      visibility: GPUShaderStage.COMPUTE,
+      buffer: { type: 'storage' }
+    }, {
+      binding: 1,
+      visibility: GPUShaderStage.COMPUTE,
+      buffer: { type: 'storage' }
+    }]
+  });
+
   const drawLayout = device.createBindGroupLayout({
     label: 'group 2 layout: draw visibility',
     entries: [{
@@ -241,6 +270,17 @@ function createVisibilityBindGroups (device: GPUDevice, visibleBuffer: GPUBuffer
   });
 
   return {
+    compute: {
+      layout: computeLayout,
+      bindGroup: device.createBindGroup({
+        label: 'group 2: compute visibility',
+        layout: computeLayout,
+        entries: [
+          { binding: 0, resource: visibleBuffer },
+          { binding: 1, resource: indirectBuffer }
+        ]
+      })
+    },
     draw: {
       layout: drawLayout,
       bindGroup: device.createBindGroup({
@@ -255,18 +295,22 @@ function createVisibilityBindGroups (device: GPUDevice, visibleBuffer: GPUBuffer
 /**
  * Creates all the shared buffers and bind groups for the scene.
  *
- * The draw runs `instanceCount` instances, and the vertex shader looks each one
- * up with `model[visibleList[instance_index]]`. Nothing fills the visible list
- * yet.
+ * Each frame then goes like this:
+ * 1. `clearBuffer` sets `instanceCount` back to 0.
+ * 2. The cull pass adds every visible object's index to the visible list and
+ *    counts it with `atomicAdd`.
+ * 3. `drawIndexedIndirect` draws that many instances, and the vertex shader
+ *    looks each one up with `model[visibleList[instance_index]]`.
  *
  * @param device - The GPU device.
  * @param instances - How many objects in the scene.
- * @returns The state the draw packet uses.
+ * @returns The state the cull and draw packets share.
  *
  * @example
  * ```ts
  * const renderState = prepareRenderState(device, 10_000);
  * const drawPacket = createDrawPacket(device, format, renderState);
+ * const computePacket = createComputePacket(device, renderState);
  * ```
  */
 export function prepareRenderState (device: GPUDevice, instances: number): RenderState {
@@ -288,14 +332,14 @@ export function prepareRenderState (device: GPUDevice, instances: number): Rende
   const indirectBuffer = device.createBuffer({
     label: 'indirect args buffer',
     size: INDIRECT_ARGS_SIZE,
-    usage: GPUBufferUsage.INDIRECT | GPUBufferUsage.COPY_DST
+    usage: GPUBufferUsage.INDIRECT | GPUBufferUsage.STORAGE | GPUBufferUsage.COPY_DST
   });
 
-  /* The arguments never change, so they're written once, not every frame. */
-  device.queue.writeBuffer(indirectBuffer, 0, new Uint32Array([indexCount, instances, 0, 0, 0]));
+  /* The CPU owns the geometry arguments; the cull pass owns instanceCount. */
+  device.queue.writeBuffer(indirectBuffer, 0, new Uint32Array([indexCount, 0, 0, 0, 0]));
 
   const sharedBindGroups = createSharedBindGroups(device, cameraBuffer, modelBuffer);
-  const visibilityBindGroups = createVisibilityBindGroups(device, visibleBuffer);
+  const visibilityBindGroups = createVisibilityBindGroups(device, visibleBuffer, indirectBuffer);
 
   return {
     instances,
@@ -307,7 +351,7 @@ export function prepareRenderState (device: GPUDevice, instances: number): Rende
     indirectBuffer,
     sharedBindGroups,
     visibilityBindGroups,
-    /* GPUBindingCommandsMixin covers render and compute passes alike. */
+    /* Works on compute and render passes alike: both have setBindGroup. */
     bindShared: (pass: GPUBindingCommandsMixin) => {
       pass.setBindGroup(GroupIndex.frame, sharedBindGroups.frame.bindGroup);
       pass.setBindGroup(GroupIndex.entity, sharedBindGroups.entity.bindGroup);

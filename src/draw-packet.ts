@@ -88,7 +88,9 @@ export function createRenderPipeline(device: GPUDevice, format: GPUTextureFormat
  * Creates the draw packet for the quads.
  *
  * `execute` sets what's specific to this draw (pipeline, group 2, geometry) and
- * issues one `drawIndexedIndirect` with the arguments from the indirect buffer.
+ * issues one `drawIndexedIndirect`. The instance count comes from the indirect
+ * buffer, where the cull pass wrote it, so the CPU never finds out how many quads
+ * get drawn.
  *
  * Bind groups 0 and 1 first, with `renderState.bindShared`.
  *

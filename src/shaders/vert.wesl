@@ -9,7 +9,7 @@ struct VertexAttributes {
 /*
  * group 0 (frame):  the camera, projection * view.
  * group 1 (entity): every object's model matrix.
- * group 2 (draw visibility): indices of the objects to draw. Nothing fills it yet.
+ * group 2 (draw visibility): indices of the objects that passed the cull, filled by cull.wesl.
  */
 @group(0) @binding(0) var<uniform> viewProjection: mat4x4f;
 @group(1) @binding(0) var<storage, read> model: array<mat4x4f>;
