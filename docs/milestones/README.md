@@ -12,3 +12,4 @@ One file per git tag. Stages 1–3 were reconstructed on 2026-10-11 and approxim
 | [`stage-5-refactor`](stage-5-refactor.md) | Modules split by concern | Exact |
 | [`stage-6-instancing`](stage-6-instancing.md) | Draw packets, per-instance attributes | Real |
 | [`stage-7-indirect`](stage-7-indirect.md) | Frame loop, 10k instances, `drawIndexedIndirect` | Real |
+| [`stage-8-gpu-culling`](stage-8-gpu-culling.md) | Storage buffers, explicit layouts, compute culling | Real |

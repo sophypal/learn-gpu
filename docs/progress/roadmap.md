@@ -5,11 +5,13 @@ One new concept per stage. Each stage is motivated by a limit the previous one e
 | Stage | Concept | Limit it answers |
 |---|---|---|
 | 7 ✓ | Frame loop, many instances, indirect draw filled from the CPU | Draw parameters must come from the CPU |
-| 8 | Moving camera: per-frame view matrix | Nothing can leave the view yet |
-| 9 | CPU frustum culling: pack visible instances, write `instanceCount = visible` into the indirect buffer | Drawing what's off-screen |
-| 10 | Per-object data in a storage buffer: `objects[instance_index]`, `firstInstance` as object ID | Instancing only works for one mesh; 16-attribute cap; compute can't write vertex attributes |
-| 11 | First compute shader (animate positions) | No GPU-side work yet |
-| 12 | GPU culling: compute + `atomicAdd` + visible index list, writing the indirect buffer | CPU culling cost at scale |
+| 8 ✓ | Storage buffers, explicit bind group layouts, GPU culling (compute + `atomicAdd` + visible list, clip-space point test) | Drawing what's off-screen; per-object data limited to vertex attributes |
+| 9 | Moving camera: per-frame view matrix | Culling can't be seen while nothing leaves the view |
+| 10 | GPU readback through a ring of staging buffers | The visible count can't be inspected from the CPU |
+
+Exercises: bounding sphere against frustum planes (stops edge popping); two-level counting with workgroup memory and barriers (one global atomic per workgroup).
+
+Skipped: CPU frustum culling (went straight to GPU culling).
 
 Later: textures and samplers (per-material bind groups, sorted draws), MSAA, lighting.
 
