@@ -44,8 +44,47 @@ async function initGPU(canvas: HTMLCanvasElement) {
   return { device, context, format };
 }
 
+/** What one frame needs. */
+interface FrameResources {
+  device: GPUDevice;
+  context: GPUCanvasContext;
+}
+
 /**
- * Sizes the canvas and sets up the GPU.
+ * Records and submits one frame. For now a frame only clears the canvas.
+ *
+ * Nothing runs on the GPU until we submit. The command encoder records
+ * commands, `finish()` packs them into a command buffer, and
+ * `queue.submit` hands that to the GPU.
+ *
+ * @param resources - The device and the canvas context.
+ *
+ * @example
+ * ```ts
+ * drawFrame({ device, context });
+ * ```
+ */
+function drawFrame({ device, context }: FrameResources) {
+  const commandEncoder = device.createCommandEncoder({label: 'frame encoder'});
+
+  const renderPass = commandEncoder.beginRenderPass({
+    label: 'render pass',
+    /* The canvas texture changes every frame, so fetch it each time. */
+    colorAttachments: [{
+      view: context.getCurrentTexture().createView(),
+      loadOp: 'clear',
+      storeOp: 'store',
+      clearValue: {r: 0, g: 0, b: 0, a: 1}
+    }]
+  });
+
+  renderPass.end();
+
+  device.queue.submit([commandEncoder.finish({label: 'frame commands'})]);
+}
+
+/**
+ * Sizes the canvas, sets up the GPU, and draws one frame.
  *
  * @example
  * ```ts
@@ -57,8 +96,9 @@ async function init() {
   canvas.width = window.innerWidth;
   canvas.height = window.innerHeight;
 
-  const { device } = await initGPU(canvas);
-  console.log('Got a GPU device:', device);
+  const { device, context } = await initGPU(canvas);
+
+  drawFrame({ device, context });
 }
 
 init();
