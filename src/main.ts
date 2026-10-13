@@ -210,11 +210,76 @@ function createRenderPipeline(device: GPUDevice, format: GPUTextureFormat) {
   });
 }
 
+/**
+ * Creates the camera's uniform buffer. For now it holds the identity matrix,
+ * which leaves every position as it is.
+ *
+ * Uniform buffers are for small data that every invocation reads, like this
+ * one matrix. `COPY_DST` lets us `writeBuffer` into it.
+ *
+ * The vertex shader reads it at `@group(0) @binding(0)`.
+ *
+ * @param device - The GPU device.
+ * @returns A 64-byte buffer holding one `mat4x4f`.
+ *
+ * @example
+ * ```ts
+ * const cameraBuffer = createCameraBuffer(device);
+ * ```
+ */
+function createCameraBuffer(device: GPUDevice) {
+  const cameraBuffer = device.createBuffer({
+    label: 'camera uniform buffer',
+    size: 16 * Float32Array.BYTES_PER_ELEMENT,
+    usage: GPUBufferUsage.UNIFORM | GPUBufferUsage.COPY_DST
+  });
+
+  /* The identity matrix, column by column. */
+  const identity = new Float32Array([
+    1, 0, 0, 0,
+    0, 1, 0, 0,
+    0, 0, 1, 0,
+    0, 0, 0, 1
+  ]);
+
+  device.queue.writeBuffer(cameraBuffer, 0, identity);
+
+  return cameraBuffer;
+}
+
+/**
+ * Creates the bind group that hands the camera buffer to the shader at
+ * `@group(0) @binding(0)`.
+ *
+ * The pipeline uses `layout: 'auto'`, so it works out its bind group layouts
+ * from the shader. We ask it for group 0's layout and build the bind group
+ * from that.
+ *
+ * @param device - The GPU device.
+ * @param pipeline - The render pipeline whose group 0 this fills.
+ * @param cameraBuffer - The camera's uniform buffer.
+ * @returns The bind group for group 0.
+ *
+ * @example
+ * ```ts
+ * const cameraBindGroup = createCameraBindGroup(device, pipeline, cameraBuffer);
+ * renderPass.setBindGroup(0, cameraBindGroup);
+ * ```
+ */
+function createCameraBindGroup(device: GPUDevice, pipeline: GPURenderPipeline, cameraBuffer: GPUBuffer) {
+  return device.createBindGroup({
+    label: 'group 0: camera',
+    layout: pipeline.getBindGroupLayout(0),
+    entries: [{ binding: 0, resource: cameraBuffer }]
+  });
+}
+
 /** What one frame needs. */
 interface FrameResources {
   device: GPUDevice;
   context: GPUCanvasContext;
   pipeline: GPURenderPipeline;
+  cameraBindGroup: GPUBindGroup;
   geometryBuffer: GPUBuffer;
   indexBuffer: GPUBuffer;
   indexCount: number;
@@ -227,14 +292,14 @@ interface FrameResources {
  * commands, `finish()` packs them into a command buffer, and
  * `queue.submit` hands that to the GPU.
  *
- * @param resources - The device, the canvas context, the pipeline, and the quad's buffers.
+ * @param resources - The device, the canvas context, the pipeline, the camera bind group, and the quad's buffers.
  *
  * @example
  * ```ts
- * drawFrame({ device, context, pipeline, geometryBuffer, indexBuffer, indexCount });
+ * drawFrame({ device, context, pipeline, cameraBindGroup, geometryBuffer, indexBuffer, indexCount });
  * ```
  */
-function drawFrame({ device, context, pipeline, geometryBuffer, indexBuffer, indexCount }: FrameResources) {
+function drawFrame({ device, context, pipeline, cameraBindGroup, geometryBuffer, indexBuffer, indexCount }: FrameResources) {
   const commandEncoder = device.createCommandEncoder({label: 'frame encoder'});
 
   const renderPass = commandEncoder.beginRenderPass({
@@ -249,6 +314,7 @@ function drawFrame({ device, context, pipeline, geometryBuffer, indexBuffer, ind
   });
 
   renderPass.setPipeline(pipeline);
+  renderPass.setBindGroup(0, cameraBindGroup);
   renderPass.setVertexBuffer(0, geometryBuffer);
   renderPass.setIndexBuffer(indexBuffer, 'uint16');
   renderPass.drawIndexed(indexCount);
@@ -272,9 +338,11 @@ async function init() {
 
   const { device, context, format } = await initGPU(canvas);
   const pipeline = createRenderPipeline(device, format);
+  const cameraBuffer = createCameraBuffer(device);
+  const cameraBindGroup = createCameraBindGroup(device, pipeline, cameraBuffer);
   const { geometryBuffer, indexBuffer, indexCount } = createQuads(device);
 
-  drawFrame({ device, context, pipeline, geometryBuffer, indexBuffer, indexCount });
+  drawFrame({ device, context, pipeline, cameraBindGroup, geometryBuffer, indexBuffer, indexCount });
 }
 
 init();
