@@ -1,4 +1,4 @@
-import { QUAD_VERTEX_COUNT } from './geometry';
+import type { DrawPacket } from './draw-packet';
 
 /** Depth format. The depth texture and the render pipeline have to agree on it. */
 export const DEPTH_FORMAT: GPUTextureFormat = 'depth24plus';
@@ -34,28 +34,25 @@ interface FrameResources {
   device: GPUDevice;
   context: GPUCanvasContext;
   depthTexture: GPUTexture;
-  pipeline: GPURenderPipeline;
-  cameraBindGroup: GPUBindGroup;
-  geometryBuffer: GPUBuffer;
-  indexBuffer: GPUBuffer;
-  indexCount: number;
+  drawPacket: DrawPacket;
 }
 
 /**
- * Records and submits one frame: clear the canvas, then draw both quads.
+ * Records and submits one frame: clear the canvas and the depth buffer, then
+ * let the draw packet record its draws.
  *
  * Nothing runs on the GPU until we submit. The command encoder records
  * commands, `finish()` packs them into a command buffer, and
  * `queue.submit` hands that to the GPU.
  *
- * @param resources - The device, the canvas context, the depth texture, the pipeline, the camera bind group, and the quad buffers.
+ * @param resources - The device, the canvas context, the depth texture, and the draw packet.
  *
  * @example
  * ```ts
- * drawFrame({ device, context, depthTexture, pipeline, cameraBindGroup, geometryBuffer, indexBuffer, indexCount });
+ * drawFrame({ device, context, depthTexture, drawPacket });
  * ```
  */
-export function drawFrame({ device, context, depthTexture, pipeline, cameraBindGroup, geometryBuffer, indexBuffer, indexCount }: FrameResources) {
+export function drawFrame({ device, context, depthTexture, drawPacket }: FrameResources) {
   const commandEncoder = device.createCommandEncoder({label: 'frame encoder'});
 
   const renderPass = commandEncoder.beginRenderPass({
@@ -75,12 +72,7 @@ export function drawFrame({ device, context, depthTexture, pipeline, cameraBindG
     }
   });
 
-  renderPass.setPipeline(pipeline);
-  renderPass.setBindGroup(0, cameraBindGroup);
-  renderPass.setVertexBuffer(0, geometryBuffer);
-  renderPass.setIndexBuffer(indexBuffer, 'uint16');
-  renderPass.drawIndexed(indexCount, 1, 0, 0);
-  renderPass.drawIndexed(indexCount, 1, 0, QUAD_VERTEX_COUNT);
+  drawPacket.execute(renderPass);
   renderPass.end();
 
   device.queue.submit([commandEncoder.finish({label: 'frame commands'})]);

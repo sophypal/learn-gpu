@@ -1,7 +1,21 @@
 import { DEPTH_FORMAT } from './render';
-import { meshLayout } from './geometry';
+import { meshLayout, createQuads, QUAD_VERTEX_COUNT } from './geometry';
 import vertexShader from './shaders/vert.wesl?static';
 import fragmentShader from './shaders/frag.wesl?static';
+
+/** One kind of draw: its pipeline, plus a function that records the draw into a render pass. */
+export interface DrawPacket {
+  pipeline: GPURenderPipeline,
+  /**
+   * Records this draw into an open render pass.
+   *
+   * @example
+   * ```ts
+   * drawPacket.execute(renderPass);
+   * ```
+   */
+  execute: (pass: GPURenderPassEncoder) => void
+}
 
 /**
  * Creates the pipeline that draws our quads.
@@ -79,10 +93,47 @@ export function createRenderPipeline(device: GPUDevice, format: GPUTextureFormat
  * renderPass.setBindGroup(0, cameraBindGroup);
  * ```
  */
-export function createCameraBindGroup(device: GPUDevice, pipeline: GPURenderPipeline, cameraBuffer: GPUBuffer) {
+function createCameraBindGroup(device: GPUDevice, pipeline: GPURenderPipeline, cameraBuffer: GPUBuffer) {
   return device.createBindGroup({
     label: 'group 0: camera',
     layout: pipeline.getBindGroupLayout(0),
     entries: [{ binding: 0, resource: cameraBuffer }]
   });
+}
+
+/**
+ * Creates the draw packet for our quads: everything one kind of draw needs,
+ * and a function that records it.
+ *
+ * `execute` sets the pipeline, the camera bind group and the geometry, and
+ * issues the draws. The frame doesn't need to know what's inside.
+ *
+ * @param device - The GPU device.
+ * @param format - The canvas format.
+ * @param cameraBuffer - The camera's uniform buffer.
+ * @returns A packet whose `execute` records the draw.
+ *
+ * @example
+ * ```ts
+ * const drawPacket = createDrawPacket(device, format, cameraBuffer);
+ * drawPacket.execute(renderPass);
+ * ```
+ */
+export function createDrawPacket (device: GPUDevice, format: GPUTextureFormat, cameraBuffer: GPUBuffer): DrawPacket {
+  const pipeline = createRenderPipeline(device, format);
+  const cameraBindGroup = createCameraBindGroup(device, pipeline, cameraBuffer);
+  const { geometryBuffer, indexBuffer, indexCount } = createQuads(device);
+
+  return {
+    pipeline,
+    execute: (pass: GPURenderPassEncoder) => {
+      pass.setPipeline(pipeline);
+      pass.setBindGroup(0, cameraBindGroup);
+
+      pass.setVertexBuffer(0, geometryBuffer);
+      pass.setIndexBuffer(indexBuffer, 'uint16');
+      pass.drawIndexed(indexCount, 1, 0, 0);
+      pass.drawIndexed(indexCount, 1, 0, QUAD_VERTEX_COUNT);
+    }
+  };
 }

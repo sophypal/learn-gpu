@@ -1,9 +1,8 @@
 import './style.css';
 import { initGPU } from './gpu';
-import { createQuads } from './geometry';
 import { createCameraBuffer } from './camera';
 import { createDepthTexture, drawFrame } from './render';
-import { createRenderPipeline, createCameraBindGroup } from './draw-packet';
+import { createDrawPacket } from './draw-packet';
 
 /**
  * Sizes the canvas, sets up the GPU, and draws one frame.
@@ -20,12 +19,10 @@ async function init() {
 
   const { device, context, format } = await initGPU(canvas);
   const depthTexture = createDepthTexture(device);
-  const pipeline = createRenderPipeline(device, format);
   const cameraBuffer = createCameraBuffer(device, window.innerWidth / window.innerHeight);
-  const cameraBindGroup = createCameraBindGroup(device, pipeline, cameraBuffer);
-  const { geometryBuffer, indexBuffer, indexCount } = createQuads(device);
+  const drawPacket = createDrawPacket(device, format, cameraBuffer);
 
-  drawFrame({ device, context, depthTexture, pipeline, cameraBindGroup, geometryBuffer, indexBuffer, indexCount });
+  drawFrame({ device, context, depthTexture, drawPacket });
 }
 
 init();
