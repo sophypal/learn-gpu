@@ -5,7 +5,14 @@ import vertexShader from './shaders/vert.wesl?static';
 import fragmentShader from './shaders/frag.wesl?static';
 
 const MAT4_SIZE_IN_BYTES = 64;
+const U32_SIZE_IN_BYTES = 4;
 const EXTENTS = 100;
+
+/**
+ * Size of the indirect draw arguments in bytes. `drawIndexedIndirect` reads
+ * five u32s: `indexCount, instanceCount, firstIndex, baseVertex, firstInstance`.
+ */
+const INDIRECT_ARGS_SIZE = 5 * U32_SIZE_IN_BYTES;
 
 /**
  * Tells the pipeline how to read one instance's model matrix from vertex
@@ -176,7 +183,9 @@ function createCameraBindGroup(device: GPUDevice, pipeline: GPURenderPipeline, c
  * and a function that records it.
  *
  * `execute` sets the pipeline, the camera bind group, the quad and the
- * per-instance matrices, and draws every quad with one instanced draw.
+ * per-instance matrices, and draws every quad with one `drawIndexedIndirect`.
+ * The draw's arguments live in a GPU buffer, written once here, instead of
+ * being passed to the call.
  *
  * @param device - The GPU device.
  * @param format - The canvas format.
@@ -196,6 +205,15 @@ export function createDrawPacket (device: GPUDevice, format: GPUTextureFormat, c
   const { geometryBuffer, indexBuffer, indexCount } = createQuads(device);
   const modelBuffer = createModelBuffer(device, instances);
 
+  const indirectBuffer = device.createBuffer({
+    label: 'indirect args buffer',
+    size: INDIRECT_ARGS_SIZE,
+    usage: GPUBufferUsage.INDIRECT | GPUBufferUsage.COPY_DST
+  });
+
+  /* The arguments never change, so they're written once, not every frame. */
+  device.queue.writeBuffer(indirectBuffer, 0, new Uint32Array([indexCount, instances, 0, 0, 0]));
+
   return {
     pipeline,
     execute: (pass: GPURenderPassEncoder) => {
@@ -205,7 +223,7 @@ export function createDrawPacket (device: GPUDevice, format: GPUTextureFormat, c
       pass.setVertexBuffer(0, geometryBuffer);
       pass.setVertexBuffer(1, modelBuffer);
       pass.setIndexBuffer(indexBuffer, 'uint16');
-      pass.drawIndexed(indexCount, instances);
+      pass.drawIndexedIndirect(indirectBuffer, 0);
     }
   };
 }
