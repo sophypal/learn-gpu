@@ -1,16 +1,16 @@
 import package::types::VertexOutput;
 
+/* Per-vertex inputs, read from vertex buffer slot 0 as described by meshLayout. */
+struct VertexAttributes {
+    @location(0) position: vec3f,
+};
+
 /*
- * Runs once per vertex. There's no vertex buffer yet: positions and colors live
- * in the shader, picked by vertex_index, which is 0, 1, 2 for draw(3).
+ * Runs once per vertex. Positions now come from the vertex buffer; colors are
+ * still picked from a constant array by vertex_index.
  */
 @vertex
-fn vsMain (@builtin(vertex_index) index: u32) -> VertexOutput {
-    var positions = array(
-        vec2f( 0.0,  0.5),
-        vec2f(-0.5, -0.5),
-        vec2f( 0.5, -0.5)
-    );
+fn vsMain (vertexAttributes: VertexAttributes, @builtin(vertex_index) index: u32) -> VertexOutput {
     var colors = array(
         vec4f(1.0, 0.0, 0.0, 1.0),
         vec4f(0.0, 1.0, 0.0, 1.0),
@@ -18,7 +18,7 @@ fn vsMain (@builtin(vertex_index) index: u32) -> VertexOutput {
     );
 
     var out: VertexOutput;
-    out.position = vec4f(positions[index], 0.0, 1.0);
+    out.position = vec4f(vertexAttributes.position, 1.0);
     out.color = colors[index];
 
     return out;

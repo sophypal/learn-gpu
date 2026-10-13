@@ -46,11 +46,81 @@ async function initGPU(canvas: HTMLCanvasElement) {
   return { device, context, format };
 }
 
+/* Bytes per vertex: a position of three floats. */
+const VERTEX_STRIDE = 3 * Float32Array.BYTES_PER_ELEMENT;
+const FLOAT_STRIDE = VERTEX_STRIDE / Float32Array.BYTES_PER_ELEMENT;
+const VERTEX_COUNT = 3;
+
+/**
+ * Tells the pipeline how to read one vertex from the vertex buffer: 12 bytes,
+ * a `float32x3` position at `@location(0)`.
+ */
+const meshLayout: GPUVertexBufferLayout = {
+  arrayStride: VERTEX_STRIDE,
+  stepMode: 'vertex',
+  attributes: [
+    {
+      shaderLocation: 0, offset: 0, format: 'float32x3'
+    }
+  ]
+};
+
+/**
+ * Creates a vertex buffer holding one triangle.
+ *
+ * We fill it with `mappedAtCreation`: the buffer starts out mapped, we write
+ * into `getMappedRange()`, and `unmap()` hands it over to the GPU. That doesn't
+ * need `COPY_DST`.
+ *
+ * @param device - The GPU device.
+ * @returns The vertex buffer.
+ *
+ * @example
+ * ```ts
+ * const { geometryBuffer } = createTriangle(device);
+ * pass.setVertexBuffer(0, geometryBuffer);
+ * pass.draw(3);
+ * ```
+ */
+function createTriangle(device: GPUDevice) {
+  const geometryBuffer = device.createBuffer({
+    label: 'triangle vertex buffer',
+    size: VERTEX_STRIDE * VERTEX_COUNT,
+    usage: GPUBufferUsage.VERTEX,
+    mappedAtCreation: true
+  });
+
+  /* Typed-array offsets count elements, not bytes. */
+  const f32 = new Float32Array(geometryBuffer.getMappedRange());
+
+  /**
+   * Writes one vertex position.
+   *
+   * @param index - Which vertex. Its float offset is `index * FLOAT_STRIDE`.
+   *
+   * @example
+   * ```ts
+   * setVertex(0, 0.0, 0.5, 0.0); // top corner
+   * ```
+   */
+  function setVertex (index: number, x: number, y: number, z: number) {
+    f32.set([x, y, z], index * FLOAT_STRIDE);
+  }
+
+  setVertex(0, 0.0, 0.5, 0.0);
+  setVertex(1, -0.5, -0.5, 0.0);
+  setVertex(2, 0.5, -0.5, 0.0);
+
+  geometryBuffer.unmap();
+
+  return { geometryBuffer };
+}
+
 /**
  * Creates the pipeline that draws our triangle.
  *
  * A pipeline bundles the shaders with everything fixed about how they run:
- * which entry points, what the vertex input looks like (nothing yet), the
+ * which entry points, what the vertex input looks like (`meshLayout`), the
  * primitive type, and the format of the texture we draw into.
  *
  * @param device - The GPU device.
@@ -79,7 +149,8 @@ function createRenderPipeline(device: GPUDevice, format: GPUTextureFormat) {
     layout: 'auto',
     vertex: {
       module: vertexShaderModule,
-      entryPoint: 'vsMain'
+      entryPoint: 'vsMain',
+      buffers: [meshLayout]
     },
     fragment: {
       module: fragmentShaderModule,
@@ -99,6 +170,7 @@ interface FrameResources {
   device: GPUDevice;
   context: GPUCanvasContext;
   pipeline: GPURenderPipeline;
+  geometryBuffer: GPUBuffer;
 }
 
 /**
@@ -108,14 +180,14 @@ interface FrameResources {
  * commands, `finish()` packs them into a command buffer, and
  * `queue.submit` hands that to the GPU.
  *
- * @param resources - The device, the canvas context, and the pipeline.
+ * @param resources - The device, the canvas context, the pipeline, and the vertex buffer.
  *
  * @example
  * ```ts
- * drawFrame({ device, context, pipeline });
+ * drawFrame({ device, context, pipeline, geometryBuffer });
  * ```
  */
-function drawFrame({ device, context, pipeline }: FrameResources) {
+function drawFrame({ device, context, pipeline, geometryBuffer }: FrameResources) {
   const commandEncoder = device.createCommandEncoder({label: 'frame encoder'});
 
   const renderPass = commandEncoder.beginRenderPass({
@@ -130,7 +202,8 @@ function drawFrame({ device, context, pipeline }: FrameResources) {
   });
 
   renderPass.setPipeline(pipeline);
-  renderPass.draw(3);
+  renderPass.setVertexBuffer(0, geometryBuffer);
+  renderPass.draw(VERTEX_COUNT);
   renderPass.end();
 
   device.queue.submit([commandEncoder.finish({label: 'frame commands'})]);
@@ -151,8 +224,9 @@ async function init() {
 
   const { device, context, format } = await initGPU(canvas);
   const pipeline = createRenderPipeline(device, format);
+  const { geometryBuffer } = createTriangle(device);
 
-  drawFrame({ device, context, pipeline });
+  drawFrame({ device, context, pipeline, geometryBuffer });
 }
 
 init();
