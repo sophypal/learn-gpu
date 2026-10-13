@@ -1,4 +1,5 @@
 override WORKGROUP_SIZE: u32 = 64;
+override CULL_SCALE: f32 = 1.0;
 
 struct IndirectDrawArgs {
     indexCount: u32,
@@ -20,6 +21,14 @@ fn csMain (
     @builtin(local_invocation_id) localIndex: vec3u
 ) {
     if (globalIndex.x >= arrayLength(&entityModel)) {
+        return;
+    }
+
+    let clip  = viewProjection * entityModel[globalIndex.x][3];
+    let w = clip.w * CULL_SCALE;
+
+    let inside = all(abs(clip.xy) <= vec2f(w)) && clip.z >= 0.0 && clip.z <= clip.w;
+    if (!inside) {
         return;
     }
 
