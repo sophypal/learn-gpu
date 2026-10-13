@@ -1,5 +1,6 @@
 import './style.css';
-import shaderCode from './shaders/shader.wesl?static';
+import vertexShader from './shaders/vert.wesl?static';
+import fragmentShader from './shaders/frag.wesl?static';
 
 /**
  * Gets a GPU device and hooks the canvas up to it.
@@ -63,20 +64,25 @@ async function initGPU(canvas: HTMLCanvasElement) {
  * ```
  */
 function createRenderPipeline(device: GPUDevice, format: GPUTextureFormat) {
-  const shaderModule = device.createShaderModule({
-    label: 'shader.wesl',
-    code: shaderCode
+  const vertexShaderModule = device.createShaderModule({
+    label: 'vert.wesl',
+    code: vertexShader
+  });
+
+  const fragmentShaderModule = device.createShaderModule({
+    label: 'frag.wesl',
+    code: fragmentShader
   });
 
   return device.createRenderPipeline({
     label: 'render pipeline',
     layout: 'auto',
     vertex: {
-      module: shaderModule,
+      module: vertexShaderModule,
       entryPoint: 'vsMain'
     },
     fragment: {
-      module: shaderModule,
+      module: fragmentShaderModule,
       entryPoint: 'fsMain',
       targets: [{
         format

@@ -1,11 +1,4 @@
-/*
- * What the vertex shader hands to the rasterizer, and the fragment shader receives.
- * `position` is clip space (the GPU divides by w); `color` is interpolated across the triangle.
- */
-struct VertexOutput {
-    @builtin(position) position: vec4f,
-    @location(0) color: vec4f
-};
+import package::types::VertexOutput;
 
 /*
  * Runs once per vertex. There's no vertex buffer yet: positions and colors live
@@ -29,10 +22,4 @@ fn vsMain (@builtin(vertex_index) index: u32) -> VertexOutput {
     out.color = colors[index];
 
     return out;
-}
-
-/* Runs once per covered pixel; outputs the interpolated vertex color to color target 0. */
-@fragment
-fn fsMain(vertex: VertexOutput) -> @location(0) vec4f {
-    return vertex.color;
 }
