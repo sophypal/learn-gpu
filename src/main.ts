@@ -46,14 +46,19 @@ async function initGPU(canvas: HTMLCanvasElement) {
   return { device, context, format };
 }
 
-/* Bytes per vertex: a position of three floats. */
-const VERTEX_STRIDE = 3 * Float32Array.BYTES_PER_ELEMENT;
+/*
+ * Single source of truth for the vertex format: position (float32x3) + color (unorm8x4).
+ * Used both when writing vertex data and when describing it to the pipeline.
+ */
+const VERTEX_STRIDE = 3 * Float32Array.BYTES_PER_ELEMENT + 4 * Uint8Array.BYTES_PER_ELEMENT;
 const FLOAT_STRIDE = VERTEX_STRIDE / Float32Array.BYTES_PER_ELEMENT;
-const VERTEX_COUNT = 3;
+const COLOR_OFFSET = 12;
 
 /**
- * Tells the pipeline how to read one vertex from the vertex buffer: 12 bytes,
- * a `float32x3` position at `@location(0)`.
+ * Tells the pipeline how to read one vertex: 16 bytes, position at
+ * `@location(0)`, color at `@location(1)`. `unorm8x4` turns four 0-255 bytes
+ * into a `vec4f` from 0.0 to 1.0, so the shader gets floats without us
+ * converting anything.
  */
 const meshLayout: GPUVertexBufferLayout = {
   arrayStride: VERTEX_STRIDE,
@@ -61,16 +66,24 @@ const meshLayout: GPUVertexBufferLayout = {
   attributes: [
     {
       shaderLocation: 0, offset: 0, format: 'float32x3'
+    },
+    {
+      shaderLocation: 1, offset: COLOR_OFFSET, format: 'unorm8x4'
     }
   ]
 };
 
+const VERTEX_COUNT = 3;
+
 /**
  * Creates a vertex buffer holding one triangle.
  *
- * We fill it with `mappedAtCreation`: the buffer starts out mapped, we write
- * into `getMappedRange()`, and `unmap()` hands it over to the GPU. That doesn't
- * need `COPY_DST`.
+ * We fill it with `mappedAtCreation`: the buffer starts out mapped,
+ * we write into `getMappedRange()`, and `unmap()` hands it over to the GPU.
+ * That doesn't need `COPY_DST`.
+ *
+ * Position and color share one buffer, so we look at the same bytes two ways:
+ * as floats for the position, as bytes for the color.
  *
  * @param device - The GPU device.
  * @returns The vertex buffer.
@@ -90,13 +103,27 @@ function createTriangle(device: GPUDevice) {
     mappedAtCreation: true
   });
 
-  /* Typed-array offsets count elements, not bytes. */
-  const f32 = new Float32Array(geometryBuffer.getMappedRange());
+  /* Two views of the same bytes. Typed-array offsets count elements, not bytes. */
+  const vertices = geometryBuffer.getMappedRange();
+  const f32 = new Float32Array(vertices);
+  const u8 = new Uint8Array(vertices);
 
   /**
-   * Writes one vertex position.
+   * A random color channel from 0 to 255.
    *
-   * @param index - Which vertex. Its float offset is `index * FLOAT_STRIDE`.
+   * @example
+   * ```ts
+   * u8.set([randomColor(), randomColor(), randomColor(), 255], offset);
+   * ```
+   */
+  function randomColor () {
+    return Math.floor(Math.random() * 256);
+  }
+
+  /**
+   * Writes one vertex: position as floats, a random opaque color as bytes.
+   *
+   * @param index - Which vertex. Its byte offset is `index * VERTEX_STRIDE`.
    *
    * @example
    * ```ts
@@ -105,6 +132,7 @@ function createTriangle(device: GPUDevice) {
    */
   function setVertex (index: number, x: number, y: number, z: number) {
     f32.set([x, y, z], index * FLOAT_STRIDE);
+    u8.set([randomColor(), randomColor(), randomColor(), 255], index * VERTEX_STRIDE + COLOR_OFFSET);
   }
 
   setVertex(0, 0.0, 0.5, 0.0);
