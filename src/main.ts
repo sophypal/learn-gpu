@@ -4,6 +4,9 @@ import { createCameraBuffer } from './camera';
 import { createDepthTexture, drawFrame } from './render';
 import { createDrawPacket } from './draw-packet';
 
+/* Number of quads in the scene. */
+const INSTANCES = 5;
+
 /**
  * Sizes the canvas, sets up the GPU, and draws one frame.
  *
@@ -20,7 +23,7 @@ async function init() {
   const { device, context, format } = await initGPU(canvas);
   const depthTexture = createDepthTexture(device);
   const cameraBuffer = createCameraBuffer(device, window.innerWidth / window.innerHeight);
-  const drawPacket = createDrawPacket(device, format, cameraBuffer);
+  const drawPacket = createDrawPacket(device, format, cameraBuffer, INSTANCES);
 
   drawFrame({ device, context, depthTexture, drawPacket });
 }

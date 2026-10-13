@@ -1,7 +1,61 @@
+import { mat4 } from 'wgpu-matrix';
 import { DEPTH_FORMAT } from './render';
-import { meshLayout, createQuads, QUAD_VERTEX_COUNT } from './geometry';
+import { meshLayout, createQuads } from './geometry';
 import vertexShader from './shaders/vert.wesl?static';
 import fragmentShader from './shaders/frag.wesl?static';
+
+const MAT4_SIZE_IN_BYTES = 64;
+
+/**
+ * Tells the pipeline how to read one instance's model matrix from vertex
+ * buffer slot 1: four `float32x4` columns at locations 2-5.
+ *
+ * `stepMode: 'instance'` means the buffer advances once per instance instead
+ * of once per vertex, so all four corners of a quad get the same matrix.
+ */
+const modelLayout: GPUVertexBufferLayout = {
+  arrayStride: MAT4_SIZE_IN_BYTES,
+  stepMode: 'instance',
+  attributes: [
+    { shaderLocation: 2, offset: 0, format: 'float32x4' },
+    { shaderLocation: 3, offset: 16, format: 'float32x4' },
+    { shaderLocation: 4, offset: 32, format: 'float32x4' },
+    { shaderLocation: 5, offset: 48, format: 'float32x4' }
+  ]
+};
+
+/**
+ * Creates the per-instance buffer: one model matrix per quad, placed in a row
+ * 1.5 units apart.
+ *
+ * @param device - The GPU device.
+ * @param instances - How many quads.
+ * @returns A vertex buffer of `instances` column-major `mat4x4f`s.
+ *
+ * @example
+ * ```ts
+ * const modelBuffer = createModelBuffer(device, 5);
+ * pass.setVertexBuffer(1, modelBuffer);
+ * ```
+ */
+function createModelBuffer (device: GPUDevice, instances: number) {
+  const modelBuffer = device.createBuffer({
+    label: 'model buffer',
+    size: instances * MAT4_SIZE_IN_BYTES,
+    usage: GPUBufferUsage.VERTEX,
+    mappedAtCreation: true
+  });
+
+  for (let i = 0; i < instances; i++) {
+    const x = (i - (instances - 1) / 2) * 1.5;
+
+    mat4.translation([x, 0, 0], new Float32Array(modelBuffer.getMappedRange(i*MAT4_SIZE_IN_BYTES, MAT4_SIZE_IN_BYTES)));
+  }
+
+  modelBuffer.unmap();
+
+  return modelBuffer;
+}
 
 /** One kind of draw: its pipeline, plus a function that records the draw into a render pass. */
 export interface DrawPacket {
@@ -51,7 +105,7 @@ export function createRenderPipeline(device: GPUDevice, format: GPUTextureFormat
     vertex: {
       module: vertexShaderModule,
       entryPoint: 'vsMain',
-      buffers: [meshLayout]
+      buffers: [meshLayout, modelLayout]
     },
     fragment: {
       module: fragmentShaderModule,
@@ -105,24 +159,26 @@ function createCameraBindGroup(device: GPUDevice, pipeline: GPURenderPipeline, c
  * Creates the draw packet for our quads: everything one kind of draw needs,
  * and a function that records it.
  *
- * `execute` sets the pipeline, the camera bind group and the geometry, and
- * issues the draws. The frame doesn't need to know what's inside.
+ * `execute` sets the pipeline, the camera bind group, the quad and the
+ * per-instance matrices, and draws every quad with one instanced draw.
  *
  * @param device - The GPU device.
  * @param format - The canvas format.
  * @param cameraBuffer - The camera's uniform buffer.
+ * @param instances - How many quads to draw.
  * @returns A packet whose `execute` records the draw.
  *
  * @example
  * ```ts
- * const drawPacket = createDrawPacket(device, format, cameraBuffer);
+ * const drawPacket = createDrawPacket(device, format, cameraBuffer, 5);
  * drawPacket.execute(renderPass);
  * ```
  */
-export function createDrawPacket (device: GPUDevice, format: GPUTextureFormat, cameraBuffer: GPUBuffer): DrawPacket {
+export function createDrawPacket (device: GPUDevice, format: GPUTextureFormat, cameraBuffer: GPUBuffer, instances: number): DrawPacket {
   const pipeline = createRenderPipeline(device, format);
   const cameraBindGroup = createCameraBindGroup(device, pipeline, cameraBuffer);
   const { geometryBuffer, indexBuffer, indexCount } = createQuads(device);
+  const modelBuffer = createModelBuffer(device, instances);
 
   return {
     pipeline,
@@ -131,9 +187,9 @@ export function createDrawPacket (device: GPUDevice, format: GPUTextureFormat, c
       pass.setBindGroup(0, cameraBindGroup);
 
       pass.setVertexBuffer(0, geometryBuffer);
+      pass.setVertexBuffer(1, modelBuffer);
       pass.setIndexBuffer(indexBuffer, 'uint16');
-      pass.drawIndexed(indexCount, 1, 0, 0);
-      pass.drawIndexed(indexCount, 1, 0, QUAD_VERTEX_COUNT);
+      pass.drawIndexed(indexCount, instances);
     }
   };
 }

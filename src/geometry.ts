@@ -27,12 +27,10 @@ export const meshLayout: GPUVertexBufferLayout = {
 
 /* Two triangles sharing the 0-2 diagonal. Counter-clockwise, so back-face culling keeps them. */
 const QUAD_INDICES = [0, 1, 2, 0, 2, 3];
-/* Vertices per quad. The second quad starts at vertex 4, which is its baseVertex. */
-export const QUAD_VERTEX_COUNT = 4;
-const VERTEX_COUNT = 2 * QUAD_VERTEX_COUNT;
+const VERTEX_COUNT = 4;
 
 /**
- * Creates the vertex and index buffers for two overlapping quads at different depths.
+ * Creates the vertex and index buffers for a single quad, -0.5 to 0.5 on x and y.
  *
  * We fill both buffers with `mappedAtCreation`: the buffer starts out mapped,
  * we write into `getMappedRange()`, and `unmap()` hands it over to the GPU.
@@ -40,9 +38,6 @@ const VERTEX_COUNT = 2 * QUAD_VERTEX_COUNT;
  *
  * Position and color share one buffer, so we look at the same bytes two ways:
  * as floats for the position, as bytes for the color.
- *
- * Both quads share one index list. The second one is drawn with `baseVertex`
- * set to 4, so index 0 means vertex 4.
  *
  * @param device - The GPU device.
  * @returns The vertex buffer, the `uint16` index buffer, and the index count.
@@ -52,8 +47,7 @@ const VERTEX_COUNT = 2 * QUAD_VERTEX_COUNT;
  * const { geometryBuffer, indexBuffer, indexCount } = createQuads(device);
  * pass.setVertexBuffer(0, geometryBuffer);
  * pass.setIndexBuffer(indexBuffer, 'uint16');
- * pass.drawIndexed(indexCount, 1, 0, 0);                 // first quad
- * pass.drawIndexed(indexCount, 1, 0, QUAD_VERTEX_COUNT); // second quad
+ * pass.drawIndexed(indexCount);
  * ```
  */
 export function createQuads(device: GPUDevice) {
@@ -103,17 +97,10 @@ export function createQuads(device: GPUDevice) {
     u8.set([randomColor(), randomColor(), randomColor(), 255], index * VERTEX_STRIDE + COLOR_OFFSET);
   }
 
-  /* Near quad, at z = 0. */
-  setVertex(0, -0.75, -0.5, 0.0);
-  setVertex(1, 0.25, -0.5, 0.0);
-  setVertex(2, 0.25, 0.5, 0.0);
-  setVertex(3, -0.75, 0.5, 0.0);
-
-  /* Far quad, 2 units back, shifted right and up so the two overlap. */
-  setVertex(4, -0.25, -0.25, -2.0);
-  setVertex(5, 0.75, -0.25, -2.0);
-  setVertex(6, 0.75, 0.75, -2.0);
-  setVertex(7, -0.25, 0.75, -2.0);
+  setVertex(0, -0.5, -0.5, 0.0);
+  setVertex(1, 0.5, -0.5, 0.0);
+  setVertex(2, 0.5, 0.5, 0.0);
+  setVertex(3, -0.5, 0.5, 0.0);
 
   geometryBuffer.unmap();
 
