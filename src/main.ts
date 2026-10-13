@@ -73,12 +73,14 @@ const meshLayout: GPUVertexBufferLayout = {
   ]
 };
 
-const VERTEX_COUNT = 3;
+/* Two triangles sharing the 0-2 diagonal. Counter-clockwise, so back-face culling keeps them. */
+const QUAD_INDICES = [0, 1, 2, 0, 2, 3];
+const VERTEX_COUNT = 4;
 
 /**
- * Creates a vertex buffer holding one triangle.
+ * Creates the vertex and index buffers for a single quad, -0.5 to 0.5 on x and y.
  *
- * We fill it with `mappedAtCreation`: the buffer starts out mapped,
+ * We fill both buffers with `mappedAtCreation`: the buffer starts out mapped,
  * we write into `getMappedRange()`, and `unmap()` hands it over to the GPU.
  * That doesn't need `COPY_DST`.
  *
@@ -86,20 +88,28 @@ const VERTEX_COUNT = 3;
  * as floats for the position, as bytes for the color.
  *
  * @param device - The GPU device.
- * @returns The vertex buffer.
+ * @returns The vertex buffer, the `uint16` index buffer, and the index count.
  *
  * @example
  * ```ts
- * const { geometryBuffer } = createTriangle(device);
+ * const { geometryBuffer, indexBuffer, indexCount } = createQuads(device);
  * pass.setVertexBuffer(0, geometryBuffer);
- * pass.draw(3);
+ * pass.setIndexBuffer(indexBuffer, 'uint16');
+ * pass.drawIndexed(indexCount);
  * ```
  */
-function createTriangle(device: GPUDevice) {
+function createQuads(device: GPUDevice) {
   const geometryBuffer = device.createBuffer({
-    label: 'triangle vertex buffer',
+    label: 'quad vertex buffer',
     size: VERTEX_STRIDE * VERTEX_COUNT,
     usage: GPUBufferUsage.VERTEX,
+    mappedAtCreation: true
+  });
+
+  const indexBuffer = device.createBuffer({
+    label: 'quad index buffer',
+    size: QUAD_INDICES.length * Uint16Array.BYTES_PER_ELEMENT,
+    usage: GPUBufferUsage.INDEX,
     mappedAtCreation: true
   });
 
@@ -127,7 +137,7 @@ function createTriangle(device: GPUDevice) {
    *
    * @example
    * ```ts
-   * setVertex(0, 0.0, 0.5, 0.0); // top corner
+   * setVertex(0, -0.5, -0.5, 0.0); // bottom-left corner
    * ```
    */
   function setVertex (index: number, x: number, y: number, z: number) {
@@ -135,17 +145,22 @@ function createTriangle(device: GPUDevice) {
     u8.set([randomColor(), randomColor(), randomColor(), 255], index * VERTEX_STRIDE + COLOR_OFFSET);
   }
 
-  setVertex(0, 0.0, 0.5, 0.0);
-  setVertex(1, -0.5, -0.5, 0.0);
-  setVertex(2, 0.5, -0.5, 0.0);
+  setVertex(0, -0.5, -0.5, 0.0);
+  setVertex(1, 0.5, -0.5, 0.0);
+  setVertex(2, 0.5, 0.5, 0.0);
+  setVertex(3, -0.5, 0.5, 0.0);
 
   geometryBuffer.unmap();
 
-  return { geometryBuffer };
+  new Uint16Array(indexBuffer.getMappedRange()).set(QUAD_INDICES);
+
+  indexBuffer.unmap();
+
+  return { geometryBuffer, indexBuffer, indexCount: QUAD_INDICES.length };
 }
 
 /**
- * Creates the pipeline that draws our triangle.
+ * Creates the pipeline that draws our quad.
  *
  * A pipeline bundles the shaders with everything fixed about how they run:
  * which entry points, what the vertex input looks like (`meshLayout`), the
@@ -187,8 +202,10 @@ function createRenderPipeline(device: GPUDevice, format: GPUTextureFormat) {
         format
       }]
     },
+    /* Back faces are skipped; QUAD_INDICES winds the quad counter-clockwise (front-facing). */
     primitive: {
-      topology: 'triangle-list'
+      topology: 'triangle-list',
+      cullMode: 'back',
     }
   });
 }
@@ -199,23 +216,25 @@ interface FrameResources {
   context: GPUCanvasContext;
   pipeline: GPURenderPipeline;
   geometryBuffer: GPUBuffer;
+  indexBuffer: GPUBuffer;
+  indexCount: number;
 }
 
 /**
- * Records and submits one frame: clear the canvas, then draw the triangle.
+ * Records and submits one frame: clear the canvas, then draw the quad.
  *
  * Nothing runs on the GPU until we submit. The command encoder records
  * commands, `finish()` packs them into a command buffer, and
  * `queue.submit` hands that to the GPU.
  *
- * @param resources - The device, the canvas context, the pipeline, and the vertex buffer.
+ * @param resources - The device, the canvas context, the pipeline, and the quad's buffers.
  *
  * @example
  * ```ts
- * drawFrame({ device, context, pipeline, geometryBuffer });
+ * drawFrame({ device, context, pipeline, geometryBuffer, indexBuffer, indexCount });
  * ```
  */
-function drawFrame({ device, context, pipeline, geometryBuffer }: FrameResources) {
+function drawFrame({ device, context, pipeline, geometryBuffer, indexBuffer, indexCount }: FrameResources) {
   const commandEncoder = device.createCommandEncoder({label: 'frame encoder'});
 
   const renderPass = commandEncoder.beginRenderPass({
@@ -231,7 +250,8 @@ function drawFrame({ device, context, pipeline, geometryBuffer }: FrameResources
 
   renderPass.setPipeline(pipeline);
   renderPass.setVertexBuffer(0, geometryBuffer);
-  renderPass.draw(VERTEX_COUNT);
+  renderPass.setIndexBuffer(indexBuffer, 'uint16');
+  renderPass.drawIndexed(indexCount);
   renderPass.end();
 
   device.queue.submit([commandEncoder.finish({label: 'frame commands'})]);
@@ -252,9 +272,9 @@ async function init() {
 
   const { device, context, format } = await initGPU(canvas);
   const pipeline = createRenderPipeline(device, format);
-  const { geometryBuffer } = createTriangle(device);
+  const { geometryBuffer, indexBuffer, indexCount } = createQuads(device);
 
-  drawFrame({ device, context, pipeline, geometryBuffer });
+  drawFrame({ device, context, pipeline, geometryBuffer, indexBuffer, indexCount });
 }
 
 init();
