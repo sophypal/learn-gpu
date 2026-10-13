@@ -1,0 +1,26 @@
+{
+  "name": "learn-gpu",
+  "private": true,
+  "version": "0.0.0",
+  "type": "module",
+  "scripts": {
+    "dev": "vite",
+    "build": "tsc && vite build",
+    "preview": "vite preview",
+    "lint": "eslint .",
+    "lint:fix": "eslint . --fix"
+  },
+  "devDependencies": {
+    "@eslint/js": "^10.0.1",
+    "@stylistic/eslint-plugin": "^5.10.0",
+    "@webgpu/types": "^0.1.74",
+    "eslint": "^10.12.0",
+    "typescript": "~6.0.2",
+    "typescript-eslint": "^8.71.1",
+    "vite": "^8.3.0",
+    "wesl-plugin": "^0.6.81"
+  },
+  "dependencies": {
+    "wgpu-matrix": "^3.4.2"
+  }
+}
