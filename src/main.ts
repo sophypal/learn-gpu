@@ -81,7 +81,7 @@ const QUAD_VERTEX_COUNT = 4;
 const VERTEX_COUNT = 2 * QUAD_VERTEX_COUNT;
 
 /**
- * Creates the vertex and index buffers for two quads, side by side at different depths.
+ * Creates the vertex and index buffers for two overlapping quads at different depths.
  *
  * We fill both buffers with `mappedAtCreation`: the buffer starts out mapped,
  * we write into `getMappedRange()`, and `unmap()` hands it over to the GPU.
@@ -152,17 +152,17 @@ function createQuads(device: GPUDevice) {
     u8.set([randomColor(), randomColor(), randomColor(), 255], index * VERTEX_STRIDE + COLOR_OFFSET);
   }
 
-  /* Left quad, at z = 0. */
-  setVertex(0, -1.25, -0.5, 0.0);
-  setVertex(1, -0.25, -0.5, 0.0);
-  setVertex(2, -0.25, 0.5, 0.0);
-  setVertex(3, -1.25, 0.5, 0.0);
+  /* Near quad, at z = 0. */
+  setVertex(0, -0.75, -0.5, 0.0);
+  setVertex(1, 0.25, -0.5, 0.0);
+  setVertex(2, 0.25, 0.5, 0.0);
+  setVertex(3, -0.75, 0.5, 0.0);
 
-  /* Right quad, 2 units farther away. */
-  setVertex(4, 0.25, -0.5, -2.0);
-  setVertex(5, 1.25, -0.5, -2.0);
-  setVertex(6, 1.25, 0.5, -2.0);
-  setVertex(7, 0.25, 0.5, -2.0);
+  /* Far quad, 2 units back, shifted right and up so the two overlap. */
+  setVertex(4, -0.25, -0.25, -2.0);
+  setVertex(5, 0.75, -0.25, -2.0);
+  setVertex(6, 0.75, 0.75, -2.0);
+  setVertex(7, -0.25, 0.75, -2.0);
 
   geometryBuffer.unmap();
 
@@ -171,6 +171,35 @@ function createQuads(device: GPUDevice) {
   indexBuffer.unmap();
 
   return { geometryBuffer, indexBuffer, indexCount: QUAD_INDICES.length };
+}
+
+/** Depth format. The depth texture and the render pipeline have to agree on it. */
+const DEPTH_FORMAT: GPUTextureFormat = 'depth24plus';
+
+/**
+ * Creates the depth texture. The render pass keeps the nearest fragment per
+ * pixel in it, so close quads hide far ones no matter what order they're drawn in.
+ *
+ * It has to be the same size as the canvas. We only create it once at the
+ * window's size, so resizing isn't handled yet.
+ *
+ * @param device - The GPU device.
+ * @returns A `DEPTH_FORMAT` texture to use as the render pass's depth attachment.
+ *
+ * @example
+ * ```ts
+ * const depthTexture = createDepthTexture(device);
+ * // in beginRenderPass:
+ * // depthStencilAttachment: { view: depthTexture.createView(), ... }
+ * ```
+ */
+function createDepthTexture(device: GPUDevice) {
+  return device.createTexture({
+    label: 'depth texture',
+    size: [window.innerWidth, window.innerHeight],
+    format: DEPTH_FORMAT,
+    usage: GPUTextureUsage.RENDER_ATTACHMENT,
+  });
 }
 
 /**
@@ -220,6 +249,12 @@ function createRenderPipeline(device: GPUDevice, format: GPUTextureFormat) {
     primitive: {
       topology: 'triangle-list',
       cullMode: 'back',
+    },
+    /* Keep the nearest fragment: pass when its depth is less than what's stored. */
+    depthStencil: {
+      format: DEPTH_FORMAT,
+      depthWriteEnabled: true,
+      depthCompare: 'less'
     }
   });
 }
@@ -328,6 +363,7 @@ function createCameraBindGroup(device: GPUDevice, pipeline: GPURenderPipeline, c
 interface FrameResources {
   device: GPUDevice;
   context: GPUCanvasContext;
+  depthTexture: GPUTexture;
   pipeline: GPURenderPipeline;
   cameraBindGroup: GPUBindGroup;
   geometryBuffer: GPUBuffer;
@@ -342,14 +378,14 @@ interface FrameResources {
  * commands, `finish()` packs them into a command buffer, and
  * `queue.submit` hands that to the GPU.
  *
- * @param resources - The device, the canvas context, the pipeline, the camera bind group, and the quad's buffers.
+ * @param resources - The device, the canvas context, the depth texture, the pipeline, the camera bind group, and the quad buffers.
  *
  * @example
  * ```ts
- * drawFrame({ device, context, pipeline, cameraBindGroup, geometryBuffer, indexBuffer, indexCount });
+ * drawFrame({ device, context, depthTexture, pipeline, cameraBindGroup, geometryBuffer, indexBuffer, indexCount });
  * ```
  */
-function drawFrame({ device, context, pipeline, cameraBindGroup, geometryBuffer, indexBuffer, indexCount }: FrameResources) {
+function drawFrame({ device, context, depthTexture, pipeline, cameraBindGroup, geometryBuffer, indexBuffer, indexCount }: FrameResources) {
   const commandEncoder = device.createCommandEncoder({label: 'frame encoder'});
 
   const renderPass = commandEncoder.beginRenderPass({
@@ -360,7 +396,13 @@ function drawFrame({ device, context, pipeline, cameraBindGroup, geometryBuffer,
       loadOp: 'clear',
       storeOp: 'store',
       clearValue: {r: 0, g: 0, b: 0, a: 1}
-    }]
+    }],
+    depthStencilAttachment: {
+      view: depthTexture.createView(),
+      depthClearValue: 1.0,
+      depthLoadOp: 'clear',
+      depthStoreOp: 'store'
+    }
   });
 
   renderPass.setPipeline(pipeline);
@@ -388,12 +430,13 @@ async function init() {
   canvas.height = window.innerHeight;
 
   const { device, context, format } = await initGPU(canvas);
+  const depthTexture = createDepthTexture(device);
   const pipeline = createRenderPipeline(device, format);
   const cameraBuffer = createCameraBuffer(device, window.innerWidth / window.innerHeight);
   const cameraBindGroup = createCameraBindGroup(device, pipeline, cameraBuffer);
   const { geometryBuffer, indexBuffer, indexCount } = createQuads(device);
 
-  drawFrame({ device, context, pipeline, cameraBindGroup, geometryBuffer, indexBuffer, indexCount });
+  drawFrame({ device, context, depthTexture, pipeline, cameraBindGroup, geometryBuffer, indexBuffer, indexCount });
 }
 
 init();
